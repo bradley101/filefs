@@ -11,8 +11,11 @@ struct inode {
     unsigned int inode_number;          // 4 bytes
     unsigned int starting_block_number;          // 4 bytes
                                         // Total = 301 bytes
-    std::array<char, 301> inode_to_bytestream();
+    auto inode_to_bytestream();
 };
+
+const unsigned int INODE_OFFSET_LENGTH = 64;
+const unsigned int INODE_BYTESTREAM_LENGTH = 301;
 
 template <unsigned int BLOCK_SIZE = 1024>
 struct block {
@@ -26,12 +29,18 @@ using block2k = block<2048>;
 class fs {
     
     std::string file_name;
+    std::fstream fs_handler;
     std::shared_ptr<inode> root;
     std::unordered_map<std::string, std::shared_ptr<inode>> inode_map;
+    unsigned int latest_inode;
 
 public:
     fs(const std::string& file_name);
 
-    bool init_fs();
+    auto persist_inode(std::shared_ptr<inode> inode);
+
+    auto fetch_inode(const unsigned int inode_number);
+
+    auto init_fs();
 
 };
