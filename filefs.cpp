@@ -74,7 +74,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-
+    fs fs(final_file_name);
+    fs.init_fs();
 
     // Remove the file
     if (!remove_file(final_file_name)) {
