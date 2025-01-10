@@ -54,8 +54,20 @@ bool remove_file(const std::string& file_name) {
     return true;
 }
 
-int process_fs_commands(const std::string& file_name) {
+int process_fs_commands(fs& fs) {
+    std::string input_command;
+    do {
+        std::cout << "> ";
+        std::cin >> input_command;
 
+        // Split the command into 2 parts on tha space delimeter
+        std::string cmd = input_command.substr(0, input_command.find(" "));
+        std::string param = input_command.substr(input_command.find(" ") + 1);
+
+        if (cmd == "touch") {
+
+        }
+    } while (1);
 }
 
 int main(int argc, char **argv) {
@@ -76,6 +88,9 @@ int main(int argc, char **argv) {
 
     fs fs(final_file_name);
     fs.init_fs();
+
+    process_fs_commands(fs);
+
 
     // Remove the file
     if (!remove_file(final_file_name)) {

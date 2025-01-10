@@ -40,11 +40,11 @@ fs::fs(const std::string& file_name) : file_name(file_name), fs_handler(file_nam
     root->inode_number = 0;
 }
 
-auto fs::init_fs() {
+bool fs::init_fs() {
     if (!persist_inode(root)) {
         return false;
     }
-    inode_map.insert({"/", root});
+    name_to_inode.insert({"/", root});
     cwd_inode = root;
     latest_inode = 1;
 }
@@ -88,10 +88,19 @@ bool fs::touch(std::string file_name) {
     file_inode->size = 0;
     
     persist_inode(file_inode);
-    inode_map.insert({ file_name, file_inode });
+    cwd_inode->children[cwd_inode->num_children++] = file_inode->inode_number;
 
+    name_to_inode.insert({ file_name, file_inode });
+    inodeno_to_inode.insert({ file_inode->inode_number, file_inode });
 }
 
 std::vector<std::string> fs::ls(std::string dir_name) {
-    
+    auto ls_vec = std::vector<std::string>();
+    auto &cwd_child = cwd_inode->children;
+
+    std::for_each(begin(cwd_child), end(cwd_child), [&](auto cwd_child_inode) {
+        ls_vec.push_back(std::string(inodeno_to_inode[cwd_child_inode]->name.data()));
+    });
+
+    return ls_vec;
 }

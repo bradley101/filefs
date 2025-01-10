@@ -33,7 +33,8 @@ class fs {
     std::string file_name;
     std::fstream fs_handler;
     std::shared_ptr<inode> root;
-    std::unordered_map<std::string, std::shared_ptr<inode>> inode_map;
+    std::unordered_map<std::string, std::shared_ptr<inode>> name_to_inode;
+    std::unordered_map<unsigned int, std::shared_ptr<inode>> inodeno_to_inode;
     unsigned int latest_inode;
     std::shared_ptr<inode> cwd_inode;
 
@@ -42,11 +43,11 @@ public:
 
     bool persist_inode(std::shared_ptr<inode> c_inode);
     auto fetch_inode(const unsigned int inode_number);
-    auto init_fs();
+    bool init_fs();
 
     bool touch(std::string file_name);
     bool cd(std::string dir_name);
     bool mkdir(std::string dir_name);
-    std::vector<std::string> ls(std::string dir_name = ".");
+    std::vector<std::string> ls(std::string dir_name = "");
 
 };
