@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "ostream": "cpp",
+        "iosfwd": "cpp",
+        "__config": "cpp",
+        "array": "cpp",
+        "fstream": "cpp",
+        "iostream": "cpp",
+        "memory": "cpp"
+    }
+}
