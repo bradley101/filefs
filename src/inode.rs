@@ -1,11 +1,19 @@
 
 const INODE_SIZE: usize = 256;
-const USABLE_INODE_SIZE: usize = 68;
+const USABLE_INODE_SIZE: usize = 4 
+                                + 64 
+                                + 4;
+
+
+/*
+    For now we only support files in our filesystem,
+    Support for directories will be added later.
+*/
 
 pub struct Inode {
     pub inode_number: u32,
     pub name: [u8; 64],
-    
+    pub starting_block_number: u32,
     reserved: [u8; (INODE_SIZE - USABLE_INODE_SIZE) as usize],
 }
 
@@ -31,3 +39,8 @@ pub struct Inode {
 
 
 */
+
+
+impl Inode {
+    pub fn new() {}
+}
