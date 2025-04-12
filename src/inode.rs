@@ -40,7 +40,13 @@ pub struct Inode {
 
 */
 
-
 impl Inode {
-    pub fn new() {}
+    pub fn new(name: [u8; 64]) -> Inode {
+        Inode {
+            inode_number: 0,
+            name: name,
+            starting_block_number: 0,
+            reserved: [0; (INODE_SIZE - USABLE_INODE_SIZE)]
+        }
+    }
 }
