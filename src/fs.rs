@@ -9,6 +9,7 @@ const CURRENT_FS_VERSION_IDX: usize = 0;
 const FS_DESCRIPTOR_SIZE: usize = 32;
 const FS_USED_SIZE: usize = 3;
 
+const INODE_STARTING_POS: usize = FS_DESCRIPTOR_SIZE;
 
 #[derive(Default)]
 struct FsDescriptor {
@@ -17,12 +18,29 @@ struct FsDescriptor {
 }
 
 use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}};
+use std::collections::LinkedList;
+use super::inode::{ Inode, INODE_SIZE };
 
-#[derive(Default)]
 struct ffs {
     opened_file: Option<File>,
     name: String,
-    size: u32
+    size: u32,
+    root_inode: Inode,
+    cwd: Inode,
+    free_inodes: LinkedList<u16>
+}
+
+impl Default for ffs {
+    fn default() -> Self {
+        ffs {
+            opened_file: None,
+            name: String::new(),
+            size: 0,
+            root_inode: Inode::default(),
+            cwd: Inode::default(),
+            free_inodes: LinkedList::new()
+        }
+    }
 }
 
 impl ffs {
@@ -33,7 +51,6 @@ impl ffs {
 
         match inst.init() {
             Ok(f) => {
-                inst.opened_file = Some(f);
                 Some(inst)
             },
             Err(_) => None
@@ -41,26 +58,43 @@ impl ffs {
 
     }
 
-    fn init(&self) -> Result<File, String> {
+    fn init(&mut self) -> Result<(), String> {
         let ff = OpenOptions::new()
+                            .truncate(true)
                             .create_new(true)
                             .read(true)
                             .write(true)
                             .open(self.name.clone());
-        
-        if ff.is_ok() {
-            let mut f = ff.unwrap();
-            match self.write_fs_desc(&mut f) {
-                Ok(_) => Ok(f),
-                Err(err) => Err(err)
-            }
-        } else {
-            Err(ff.err().unwrap().to_string())
+        if ff.is_err() {
+            return Err(ff.err().unwrap().to_string());
         }
 
+        self.opened_file = Some(ff.unwrap());
+
+        match self.write_fs_desc() {
+            Err(err) => return Err(err),
+            _ => {}
+        }
+
+        self.create_root_inode();
+        self.init_free_inodes_list();
+        Ok(())
     }
 
-    fn write_fs_desc(&self, f: &mut File) -> Result<(), String>{
+    fn init_free_inodes_list(&mut self) {
+        let MAX_INODE_COUNT: u16 = self.get_max_inode_count();
+        let TOTAL_INODE_SIZE: usize = (MAX_INODE_COUNT as usize) * INODE_SIZE as usize;
+        self.free_inodes.clear();
+        
+        // Not including the root inode number "0" in the free inode list
+        for inode_number in 1..MAX_INODE_COUNT {
+            self.free_inodes.push_back(inode_number);
+        }
+    }
+
+    fn write_fs_desc(&mut self) -> Result<(), String>{
+        let f = self.opened_file.as_mut().unwrap();
+
         if f.seek(SeekFrom::Start(0)).is_err() {
             return Err(String::from("Unable to seek to start"));
         }
@@ -85,16 +119,47 @@ impl ffs {
         }
     }
 
+    fn get_max_inode_count(&self) -> u16 {
+        if self.size <= 1024 * 1024 {
+            8u16
+        } else if self.size <= 10 * 1024 * 1024 {
+            64u16
+        } else {
+            512u16
+        }
+    }
+
+    fn create_root_inode(&mut self) -> Result<(), String> {
+        self.root_inode = Inode::default();
+        {
+            let mut ri = &mut self.root_inode;
+            ri.name.copy_from_slice("/".as_bytes());
+            ri.file_type = 1;
+        }
+        self.persist_inode(&self.root_inode)
+    }
+
+    fn persist_inode(&mut self, inode: &Inode) -> Result<(), String> {
+        let inode_offset = INODE_STARTING_POS + (INODE_SIZE * inode.inode_number as usize);
+        match self.opened_file.as_mut().unwrap().write_all(&inode.serialize()) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err.to_string())
+        }
+
+    }
+
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::remove_file;
+    // use std::fs::remove_file;
 
     #[test]
     fn test_fs() {
-        let fs = ffs::new("test_fs.dat".to_string(), 1024 * 1024);
+        let fs = ffs::new(
+            "test_fs.dat".to_string(),
+            1024 * 1024 * 10);
         assert!(fs.is_some());
         let fs = fs.unwrap();
         // remove_file(fs.name).unwrap();

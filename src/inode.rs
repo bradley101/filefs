@@ -1,8 +1,11 @@
 
-const INODE_SIZE: usize = 256;
-const USABLE_INODE_SIZE: usize = 4 
+pub const INODE_SIZE: usize = 256;
+pub const USABLE_INODE_SIZE: usize = 2 
                                 + 64 
-                                + 4;
+                                + 2
+                                + 1
+                                + 2
+                                + (2 * 64);
 
 
 /*
@@ -11,10 +14,27 @@ const USABLE_INODE_SIZE: usize = 4
 */
 
 pub struct Inode {
-    pub inode_number: u32,
-    pub name: [u8; 64],
-    pub starting_block_number: u32,
+    pub inode_number: u16,                          // inode number of the file
+    pub name: [u8; 64],                             // name of the file
+    pub starting_block_number: u16,                 // starting block number of the file
+    pub file_type: u8,                              // 0 for file, 1 for directory
+    pub file_size: u16,                             // size of the file in bytes
+    pub childrens: [u16; 64],                       // array of inode numbers of the children
     reserved: [u8; (INODE_SIZE - USABLE_INODE_SIZE) as usize],
+}
+
+impl Default for Inode {
+    fn default() -> Self {
+        Inode {
+            inode_number: 0,
+            name: [0; 64],
+            starting_block_number: 0,
+            file_type: 0,
+            file_size: 0,
+            childrens: [0; 64],
+            reserved: [0; (INODE_SIZE - USABLE_INODE_SIZE) as usize],
+        }
+    }
 }
 
 /*
@@ -46,7 +66,26 @@ impl Inode {
             inode_number: 0,
             name: name,
             starting_block_number: 0,
+            file_type: 0,
+            file_size: 0,
+            childrens: [0; 64],
             reserved: [0; (INODE_SIZE - USABLE_INODE_SIZE)]
         }
+    }
+
+    pub fn serialize(&self) -> [u8; INODE_SIZE] {
+        let mut serialized_inode: [u8; INODE_SIZE] = [0; INODE_SIZE];
+        serialized_inode[0..2].copy_from_slice(&self.inode_number.to_le_bytes());
+        serialized_inode[2..66].copy_from_slice(&self.name);
+        serialized_inode[66..68].copy_from_slice(&self.starting_block_number.to_le_bytes());
+        serialized_inode[68] = self.file_type;
+        serialized_inode[69..71].copy_from_slice(&self.file_size.to_le_bytes());
+        
+        for i in 0..64 {
+            serialized_inode[71 + (i * 2)..73 + (i * 2)].copy_from_slice(&self.childrens[i].to_le_bytes());
+        }
+        
+        serialized_inode[135..].copy_from_slice(&self.reserved);
+        serialized_inode
     }
 }
