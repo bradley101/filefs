@@ -87,5 +87,19 @@ impl ffs {
 
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::remove_file;
+
+    #[test]
+    fn test_fs() {
+        let fs = ffs::new("test_fs.dat".to_string(), 1024 * 1024);
+        assert!(fs.is_some());
+        let fs = fs.unwrap();
+        // remove_file(fs.name).unwrap();
+    }
+}
+
 
      
