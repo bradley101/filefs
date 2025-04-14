@@ -17,9 +17,9 @@ struct FsDescriptor {
     reserved: [u8; (FS_DESCRIPTOR_SIZE - FS_USED_SIZE)]
 }
 
-use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}};
+use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 use std::collections::LinkedList;
-use super::inode::{ Inode, INODE_SIZE };
+use super::inode::{ Inode, INODE_SIZE, MAX_FILE_NAME_SIZE};
 
 struct ffs {
     opened_file: Option<File>,
@@ -28,6 +28,22 @@ struct ffs {
     root_inode: Inode,
     cwd: Inode,
     free_inodes: LinkedList<u16>
+}
+
+trait Path {
+    fn byte_array(&self) -> &[u8];
+}
+
+impl Path for String {
+    fn byte_array(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl Path for &str {
+    fn byte_array(&self) -> &[u8] {
+        return self.as_bytes()
+    }
 }
 
 impl Default for ffs {
@@ -60,7 +76,7 @@ impl ffs {
 
     fn init(&mut self) -> Result<(), String> {
         let ff = OpenOptions::new()
-                            .create_new(true)
+                            .create(true)
                             .read(true)
                             .write(true)
                             .open(self.name.clone());
@@ -77,6 +93,9 @@ impl ffs {
 
         self.create_root_inode();
         self.init_free_inodes_list();
+
+        self.cwd = self.root_inode.clone();
+
         Ok(())
     }
 
@@ -129,7 +148,7 @@ impl ffs {
     fn create_root_inode(&mut self) -> Result<(), String> {
         let mut root_inode = Inode::default();
         let root_name_bytes = "/".as_bytes();
-        root_inode.name[..root_name_bytes.len().min(64)].copy_from_slice(&root_name_bytes[..]);
+        root_inode.name[..root_name_bytes.len().min(MAX_FILE_NAME_SIZE)].copy_from_slice(&root_name_bytes[..]);
         root_inode.file_type = 1;
         match self.persist_inode(&root_inode) {
             Ok(_) => {
@@ -147,10 +166,50 @@ impl ffs {
         let inode_bytes= inode.serialize();
         let of = self.opened_file.as_mut().unwrap();
 
-        match of.write_all(&inode_bytes) {
+        match of.write_all_at(&inode_bytes, inode_offset as u64) {
             Ok(_) => Ok(()),
             Err(err) => Err(err.to_string())
         }
+    }
+
+    fn touch<T: Path>(&mut self, name: T) -> Result<(), String> {
+        let mut inode = Inode::new(name.byte_array());
+
+        if self.free_inodes.is_empty() {
+            return Err(String::from("No free inodes available"));
+        }
+
+        let mut cwd = self.cwd.clone();
+        inode.inode_number = self.free_inodes.pop_front().unwrap();
+        inode.parent = self.cwd.inode_number;
+        cwd.childrens[self.get_children_count(&cwd) as usize] = inode.inode_number;
+
+        if let Err(err) = self.persist_inode(&inode) {
+            return Err(err);
+        }
+
+        if let Err(err) = self.persist_inode(&cwd) {
+            return Err(err);
+        }
+            
+        self.cwd = cwd;
+        Ok(())
+    }
+
+    fn ls<T: Path>(&mut self, name: T) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn get_children_count(&self, wd: &Inode) -> usize {
+        wd.childrens.iter().take_while(|&&child| child != 0).count()
+    }
+
+    fn get_cwd(&self) -> Inode {
+        self.cwd.clone()
+    }
+
+    fn flush_to_file(&mut self) -> Result<(), std::io::Error> {
+        self.opened_file.as_mut().unwrap().flush()
     }
 
 }
@@ -169,6 +228,30 @@ mod tests {
         let fs = fs.unwrap();
         remove_file(fs.name).unwrap();
     }
+
+    #[test]
+    fn test_fs_touch() {
+        let fs = ffs::new(
+            "test_fs_touch.dat".to_string(),
+            1024 * 1024 * 10);
+        assert!(fs.is_some());
+        let mut fs = fs.unwrap();
+
+        let x1 = fs.touch("file1");
+        assert!(x1.is_ok());
+
+        let x2 = fs.touch("file2");
+        assert!(x2.is_ok());
+
+        let x3 = fs.touch("file3");
+        assert!(x3.is_ok());
+
+        let cwd = fs.get_cwd();
+
+        assert!(fs.get_children_count(&cwd) == 3);
+        // remove_file(fs.name).unwrap();
+    }
+
 }
 
 

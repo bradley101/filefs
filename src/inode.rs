@@ -1,11 +1,16 @@
+use std::char::MAX;
+
+pub const MAX_FILE_NAME_SIZE: usize = 64;
+pub const MAX_CHILDREN_COUNT: usize = 64;
 
 pub const INODE_SIZE: usize = 256;
 pub const USABLE_INODE_SIZE: usize = 2 
-                                + 64 
+                                + 2
+                                + MAX_FILE_NAME_SIZE 
                                 + 2
                                 + 1
                                 + 2
-                                + (2 * 64);
+                                + (2 * MAX_CHILDREN_COUNT);
 
 
 /*
@@ -13,13 +18,16 @@ pub const USABLE_INODE_SIZE: usize = 2
     Support for directories will be added later.
 */
 
+
+#[derive(Copy, Clone)]
 pub struct Inode {
     pub inode_number: u16,                          // inode number of the file
-    pub name: [u8; 64],                             // name of the file
+    pub parent: u16,                                // inode number of the parent
+    pub name: [u8; MAX_FILE_NAME_SIZE],                             // name of the file
     pub starting_block_number: u16,                 // starting block number of the file
     pub file_type: u8,                              // 0 for file, 1 for directory
     pub file_size: u16,                             // size of the file in bytes
-    pub childrens: [u16; 64],                       // array of inode numbers of the children
+    pub childrens: [u16; MAX_CHILDREN_COUNT],                       // array of inode numbers of the children
     reserved: [u8; (INODE_SIZE - USABLE_INODE_SIZE) as usize],
 }
 
@@ -27,11 +35,12 @@ impl Default for Inode {
     fn default() -> Self {
         Inode {
             inode_number: 0,
-            name: [0; 64],
+            parent: 0,
+            name: [0; MAX_FILE_NAME_SIZE],
             starting_block_number: 0,
             file_type: 0,
             file_size: 0,
-            childrens: [0; 64],
+            childrens: [0; MAX_CHILDREN_COUNT],
             reserved: [0; (INODE_SIZE - USABLE_INODE_SIZE) as usize],
         }
     }
@@ -61,28 +70,23 @@ impl Default for Inode {
 */
 
 impl Inode {
-    pub fn new(name: [u8; 64]) -> Inode {
-        Inode {
-            inode_number: 0,
-            name: name,
-            starting_block_number: 0,
-            file_type: 0,
-            file_size: 0,
-            childrens: [0; 64],
-            reserved: [0; (INODE_SIZE - USABLE_INODE_SIZE)]
-        }
+    pub fn new(name: &[u8]) -> Inode {
+        let mut inode = Inode::default();
+        inode.name[..name.len().min(MAX_FILE_NAME_SIZE)].copy_from_slice(name);
+        inode
     }
 
     pub fn serialize(&self) -> [u8; INODE_SIZE] {
         let mut serialized_inode: [u8; INODE_SIZE] = [0; INODE_SIZE];
         serialized_inode[0..2].copy_from_slice(&self.inode_number.to_le_bytes());
-        serialized_inode[2..66].copy_from_slice(&self.name);
-        serialized_inode[66..68].copy_from_slice(&self.starting_block_number.to_le_bytes());
-        serialized_inode[68] = self.file_type;
-        serialized_inode[69..71].copy_from_slice(&self.file_size.to_le_bytes());
+        serialized_inode[2..4].copy_from_slice(&self.parent.to_le_bytes());
+        serialized_inode[4..68].copy_from_slice(&self.name);
+        serialized_inode[68..70].copy_from_slice(&self.starting_block_number.to_le_bytes());
+        serialized_inode[70] = self.file_type;
+        serialized_inode[71..73].copy_from_slice(&self.file_size.to_le_bytes());
         
-        for i in 0..64 {
-            serialized_inode[71 + (i * 2)..73 + (i * 2)].copy_from_slice(&self.childrens[i].to_le_bytes());
+        for i in 0..MAX_CHILDREN_COUNT {
+            serialized_inode[73 + (i * 2)..75 + (i * 2)].copy_from_slice(&self.childrens[i].to_le_bytes());
         }
         
         serialized_inode[USABLE_INODE_SIZE..USABLE_INODE_SIZE + self.reserved.len()].copy_from_slice(&self.reserved);
