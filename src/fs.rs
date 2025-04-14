@@ -19,6 +19,8 @@ struct FsDescriptor {
 
 use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 use std::collections::LinkedList;
+use crate::inode::MAX_CHILDREN_COUNT;
+
 use super::inode::{ Inode, INODE_SIZE, MAX_FILE_NAME_SIZE};
 
 struct ffs {
@@ -43,6 +45,22 @@ impl Path for String {
 impl Path for &str {
     fn byte_array(&self) -> &[u8] {
         return self.as_bytes()
+    }
+}
+
+struct DirItem {
+    name: String,
+    item_type: u8,
+    size: u16
+}
+
+impl DirItem {
+    pub fn from(inode: &Inode) -> Self {
+        Self {
+            name: String::from_utf8_lossy(&inode.name).trim_end_matches('\0').to_string(),
+            item_type: inode.file_type,
+            size: inode.file_size
+        }
     }
 }
 
@@ -160,8 +178,12 @@ impl ffs {
         
     }
 
+    fn get_inode_offset(inode_number: u16) -> usize {
+        INODE_STARTING_POS + (INODE_SIZE * inode_number as usize)
+    }
+
     fn persist_inode(&mut self, inode: &Inode) -> Result<(), String> {
-        let inode_offset = INODE_STARTING_POS + (INODE_SIZE * inode.inode_number as usize);
+        let inode_offset = ffs::get_inode_offset(inode.inode_number);
 
         let inode_bytes= inode.serialize();
         let of = self.opened_file.as_mut().unwrap();
@@ -170,6 +192,24 @@ impl ffs {
             Ok(_) => Ok(()),
             Err(err) => Err(err.to_string())
         }
+    }
+
+    fn fetch_inode(&self, inode_number: u16) -> Result<Inode, String> {
+        let inode_offset = ffs::get_inode_offset(inode_number);
+
+        let mut inode = Inode::default();
+        let inode_bytes = unsafe {
+            std::slice::from_raw_parts_mut(
+                &mut inode as *mut Inode as *mut u8,
+                std::mem::size_of::<Inode>())
+        };
+
+        if let Err(err) = self.opened_file.as_ref().unwrap()
+            .read_exact_at(inode_bytes, inode_offset as u64) {
+            return Err(err.to_string());
+        }
+
+        Ok(inode)
     }
 
     fn touch<T: Path>(&mut self, name: T) -> Result<(), String> {
@@ -196,8 +236,30 @@ impl ffs {
         Ok(())
     }
 
-    fn ls<T: Path>(&mut self, name: T) -> Result<(), String> {
+    fn cd<T: Path>(&mut self, name: T) -> Result<(), String> {
         Ok(())
+    }
+
+    fn ls(&self) -> Result<Vec<DirItem>, String> {
+        // TODO -  Currently not supporting "nested names"
+        let mut items: Vec<DirItem> = Vec::with_capacity(MAX_CHILDREN_COUNT);
+
+        self.cwd.childrens
+            .iter()
+            .filter(|child_inode| {   
+                **child_inode > 0
+            })
+            .map(|child_inode| {
+                self.fetch_inode(*child_inode)
+            })
+            .map(|inode| {
+                DirItem::from(inode.as_ref().ok().unwrap())
+            })
+            .for_each(|item| {
+                items.push(item);
+            });
+
+        Ok(items)
     }
 
     fn get_children_count(&self, wd: &Inode) -> usize {
@@ -217,7 +279,7 @@ impl ffs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::remove_file;
+    use std::{fmt::Debug, fs::remove_file};
 
     #[test]
     fn test_fs() {
@@ -248,8 +310,27 @@ mod tests {
 
         let cwd = fs.get_cwd();
 
+        let I: usize = std::mem::size_of::<Inode>();
+
         assert!(fs.get_children_count(&cwd) == 3);
-        // remove_file(fs.name).unwrap();
+    }
+
+    #[test]
+    fn test_ls() {
+        let fs = ffs::new(
+            "test_ls.dat".to_string(),
+            1024 * 1024 * 10);
+        assert!(fs.is_some());
+        let mut fs = fs.unwrap();
+        
+        for i in 1..64 {
+            fs.touch(format!("file{}", i));
+        }
+
+        let items = fs.ls().ok().unwrap();
+
+        assert!(items.len() == 63)
+        
     }
 
 }

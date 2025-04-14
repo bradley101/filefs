@@ -1,4 +1,3 @@
-use std::char::MAX;
 
 pub const MAX_FILE_NAME_SIZE: usize = 64;
 pub const MAX_CHILDREN_COUNT: usize = 64;
@@ -11,7 +10,6 @@ pub const USABLE_INODE_SIZE: usize = 2
                                 + 1
                                 + 2
                                 + (2 * MAX_CHILDREN_COUNT);
-
 
 /*
     For now we only support files in our filesystem,
@@ -76,20 +74,33 @@ impl Inode {
         inode
     }
 
-    pub fn serialize(&self) -> [u8; INODE_SIZE] {
-        let mut serialized_inode: [u8; INODE_SIZE] = [0; INODE_SIZE];
-        serialized_inode[0..2].copy_from_slice(&self.inode_number.to_le_bytes());
-        serialized_inode[2..4].copy_from_slice(&self.parent.to_le_bytes());
-        serialized_inode[4..68].copy_from_slice(&self.name);
-        serialized_inode[68..70].copy_from_slice(&self.starting_block_number.to_le_bytes());
-        serialized_inode[70] = self.file_type;
-        serialized_inode[71..73].copy_from_slice(&self.file_size.to_le_bytes());
+    pub fn serialize(&self) -> &[u8] {
+        // let mut serialized_inode: [u8; INODE_SIZE] = [0; INODE_SIZE];
+        // serialized_inode[0..2].copy_from_slice(&self.inode_number.to_le_bytes());
+        // serialized_inode[2..4].copy_from_slice(&self.parent.to_le_bytes());
+        // serialized_inode[4..68].copy_from_slice(&self.name);
+        // serialized_inode[68..70].copy_from_slice(&self.starting_block_number.to_le_bytes());
+        // serialized_inode[70] = self.file_type;
+        // serialized_inode[71..73].copy_from_slice(&self.file_size.to_le_bytes());
         
-        for i in 0..MAX_CHILDREN_COUNT {
-            serialized_inode[73 + (i * 2)..75 + (i * 2)].copy_from_slice(&self.childrens[i].to_le_bytes());
+        // for i in 0..MAX_CHILDREN_COUNT {
+        //     serialized_inode[73 + (i * 2)..75 + (i * 2)].copy_from_slice(&self.childrens[i].to_le_bytes());
+        // }
+        
+        // serialized_inode[USABLE_INODE_SIZE..USABLE_INODE_SIZE + self.reserved.len()].copy_from_slice(&self.reserved);
+        // serialized_inode
+
+        unsafe {
+            std::slice::from_raw_parts(
+                self as *const Inode as *const u8, std::mem::size_of::<Inode>())
         }
-        
-        serialized_inode[USABLE_INODE_SIZE..USABLE_INODE_SIZE + self.reserved.len()].copy_from_slice(&self.reserved);
-        serialized_inode
+    }
+
+    pub fn deserialize(buffer: &[u8]) -> Inode {
+        assert!(buffer.len() == INODE_SIZE);
+
+        // TODO
+
+        Inode::default()
     }
 }
