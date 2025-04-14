@@ -85,7 +85,7 @@ impl Inode {
             serialized_inode[71 + (i * 2)..73 + (i * 2)].copy_from_slice(&self.childrens[i].to_le_bytes());
         }
         
-        serialized_inode[135..].copy_from_slice(&self.reserved);
+        serialized_inode[USABLE_INODE_SIZE..USABLE_INODE_SIZE + self.reserved.len()].copy_from_slice(&self.reserved);
         serialized_inode
     }
 }

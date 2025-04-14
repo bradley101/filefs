@@ -60,7 +60,6 @@ impl ffs {
 
     fn init(&mut self) -> Result<(), String> {
         let ff = OpenOptions::new()
-                            .truncate(true)
                             .create_new(true)
                             .read(true)
                             .write(true)
@@ -82,12 +81,10 @@ impl ffs {
     }
 
     fn init_free_inodes_list(&mut self) {
-        let MAX_INODE_COUNT: u16 = self.get_max_inode_count();
-        let TOTAL_INODE_SIZE: usize = (MAX_INODE_COUNT as usize) * INODE_SIZE as usize;
         self.free_inodes.clear();
         
         // Not including the root inode number "0" in the free inode list
-        for inode_number in 1..MAX_INODE_COUNT {
+        for inode_number in 1..self.get_max_inode_count() {
             self.free_inodes.push_back(inode_number);
         }
     }
@@ -130,22 +127,30 @@ impl ffs {
     }
 
     fn create_root_inode(&mut self) -> Result<(), String> {
-        self.root_inode = Inode::default();
-        {
-            let mut ri = &mut self.root_inode;
-            ri.name.copy_from_slice("/".as_bytes());
-            ri.file_type = 1;
+        let mut root_inode = Inode::default();
+        let root_name_bytes = "/".as_bytes();
+        root_inode.name[..root_name_bytes.len().min(64)].copy_from_slice(&root_name_bytes[..]);
+        root_inode.file_type = 1;
+        match self.persist_inode(&root_inode) {
+            Ok(_) => {
+                self.root_inode = root_inode;
+                Ok(())
+            },
+            Err(err) => Err(err)
         }
-        self.persist_inode(&self.root_inode)
+        
     }
 
     fn persist_inode(&mut self, inode: &Inode) -> Result<(), String> {
         let inode_offset = INODE_STARTING_POS + (INODE_SIZE * inode.inode_number as usize);
-        match self.opened_file.as_mut().unwrap().write_all(&inode.serialize()) {
+
+        let inode_bytes= inode.serialize();
+        let of = self.opened_file.as_mut().unwrap();
+
+        match of.write_all(&inode_bytes) {
             Ok(_) => Ok(()),
             Err(err) => Err(err.to_string())
         }
-
     }
 
 }
@@ -153,7 +158,7 @@ impl ffs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use std::fs::remove_file;
+    use std::fs::remove_file;
 
     #[test]
     fn test_fs() {
@@ -162,7 +167,7 @@ mod tests {
             1024 * 1024 * 10);
         assert!(fs.is_some());
         let fs = fs.unwrap();
-        // remove_file(fs.name).unwrap();
+        remove_file(fs.name).unwrap();
     }
 }
 
