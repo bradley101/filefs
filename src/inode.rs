@@ -16,6 +16,12 @@ pub const USABLE_INODE_SIZE: usize = 2
     Support for directories will be added later.
 */
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileTypes {
+    File = 0,
+    Directory = 1
+}
 
 #[derive(Copy, Clone)]
 pub struct Inode {
@@ -99,7 +105,7 @@ impl Inode {
     pub fn deserialize(buffer: &[u8]) -> Inode {
         assert!(buffer.len() == INODE_SIZE);
 
-        // TODO
+        todo!();
 
         Inode::default()
     }

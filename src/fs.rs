@@ -17,11 +17,11 @@ struct FsDescriptor {
     reserved: [u8; (FS_DESCRIPTOR_SIZE - FS_USED_SIZE)]
 }
 
-use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
+use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, iter, os::unix::fs::FileExt};
 use std::collections::LinkedList;
 use crate::inode::MAX_CHILDREN_COUNT;
 
-use super::inode::{ Inode, INODE_SIZE, MAX_FILE_NAME_SIZE};
+use super::inode::{ Inode, INODE_SIZE, MAX_FILE_NAME_SIZE, FileTypes };
 
 struct ffs {
     opened_file: Option<File>,
@@ -34,17 +34,36 @@ struct ffs {
 
 trait Path {
     fn byte_array(&self) -> &[u8];
+    fn string(&self) -> String;
 }
 
 impl Path for String {
     fn byte_array(&self) -> &[u8] {
         self.as_bytes()
     }
+
+    fn string(&self) -> String {
+        self.to_string()
+    }
 }
 
 impl Path for &str {
     fn byte_array(&self) -> &[u8] {
-        return self.as_bytes()
+        self.as_bytes()
+    }
+
+    fn string(&self) -> String {
+        String::from(*self)
+    }
+}
+
+impl Path for &[u8] {
+    fn byte_array(&self) -> &[u8] {
+        *self
+    }
+
+    fn string(&self) -> String {
+        String::from_utf8_lossy(*self).trim_end_matches('\0').to_string()
     }
 }
 
@@ -75,6 +94,19 @@ impl Default for ffs {
             free_inodes: LinkedList::new()
         }
     }
+}
+
+macro_rules! iter_children {
+    ($fs:expr) => {
+        $fs.cwd.childrens
+            .iter()
+            .filter(|child_inode| {   
+                **child_inode > 0
+            })
+            .map(|child_inode| {
+                $fs.fetch_inode(*child_inode).ok().unwrap()
+            })
+    };
 }
 
 impl ffs {
@@ -212,16 +244,31 @@ impl ffs {
         Ok(inode)
     }
 
-    fn touch<T: Path>(&mut self, name: T) -> Result<(), String> {
-        let mut inode = Inode::new(name.byte_array());
+    fn check_if_already_exists(&self, name_bytes: &[u8]) -> Option<Inode> {
+        iter_children!(&self)
+            .find(|child| {
+                String::from_utf8_lossy(child.name.as_slice())
+                    .trim_end_matches('\0').to_string().as_bytes() == name_bytes
+            })
+    }
 
-        if self.free_inodes.is_empty() {
-            return Err(String::from("No free inodes available"));
+    fn create_item<T: Path>(&mut self, name: T, file_type: FileTypes) -> Result<(), String> {
+        if self.free_inodes.is_empty() && self.get_children_count(&self.cwd) == MAX_CHILDREN_COUNT {
+            return Err(String::from("no space left"));
         }
-
+        
+        {
+            let existing_inode = self.check_if_already_exists(name.byte_array());
+            if existing_inode.is_some() {
+                return Err(String::from("file already exists"));
+            }
+        }
+        
+        let mut inode = Inode::new(name.byte_array());
         let mut cwd = self.cwd.clone();
         inode.inode_number = self.free_inodes.pop_front().unwrap();
         inode.parent = self.cwd.inode_number;
+        inode.file_type = file_type as u8;
         cwd.childrens[self.get_children_count(&cwd) as usize] = inode.inode_number;
 
         if let Err(err) = self.persist_inode(&inode) {
@@ -236,29 +283,42 @@ impl ffs {
         Ok(())
     }
 
+    fn mkdir<T: Path>(&mut self, dir_name: T) -> Result<(), String> {
+        self.create_item(dir_name, FileTypes::Directory)
+    }
+
+
+    fn touch<T: Path>(&mut self, name: T) -> Result<(), String> {
+        self.create_item(name, FileTypes::File)
+    }
+
     fn cd<T: Path>(&mut self, name: T) -> Result<(), String> {
+        if name.byte_array() == "..".as_bytes() {
+            self.cwd = self.fetch_inode(self.cwd.parent)?;
+            return Ok(());
+        }
+
+        let existing_inode = self.check_if_already_exists(name.byte_array());
+        if existing_inode.is_none() {
+            return Err(format!("{} not found", name.string()))
+        }
+
+        self.cwd = existing_inode.unwrap();
         Ok(())
     }
 
     fn ls(&self) -> Result<Vec<DirItem>, String> {
-        // TODO -  Currently not supporting "nested names"
+        // TODO -  Currently not supporting names
         let mut items: Vec<DirItem> = Vec::with_capacity(MAX_CHILDREN_COUNT);
-
-        self.cwd.childrens
-            .iter()
-            .filter(|child_inode| {   
-                **child_inode > 0
-            })
-            .map(|child_inode| {
-                self.fetch_inode(*child_inode)
-            })
+        
+        iter_children!(&self)
             .map(|inode| {
-                DirItem::from(inode.as_ref().ok().unwrap())
+                DirItem::from(&inode)
             })
             .for_each(|item| {
                 items.push(item);
             });
-
+        
         Ok(items)
     }
 
@@ -308,6 +368,11 @@ mod tests {
         let x3 = fs.touch("file3");
         assert!(x3.is_ok());
 
+        let x4 = fs.touch("file3");
+        assert!(x4.as_ref().is_err());
+
+        println!("Error is -> {}", x4.err().unwrap());
+
         let cwd = fs.get_cwd();
 
         let I: usize = std::mem::size_of::<Inode>();
@@ -330,7 +395,20 @@ mod tests {
         let items = fs.ls().ok().unwrap();
 
         assert!(items.len() == 63)
-        
+    }
+
+    fn test_mkdir_cd() {
+        let fs = ffs::new(
+            "test_mkdir_cd.dat".to_string(),
+            1024 * 1024 * 10);
+        assert!(fs.is_some());
+        let mut fs = fs.unwrap();
+
+        fs.mkdir("dir1");
+        fs.cd("dir1");
+
+
+
     }
 
 }
