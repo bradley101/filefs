@@ -6,22 +6,38 @@ const VALID_FS_VERSIONS: [[u8; 3]; NUM_RELEASED_VERSIONS]  = [
 ];
 const CURRENT_FS_VERSION_IDX: usize = 0;
 
-const FS_DESCRIPTOR_SIZE: usize = 32;
-const FS_USED_SIZE: usize = 3;
+const FS_DESCRIPTOR_SIZE: usize = 128;
+const FS_USED_SIZE: usize = 2
+                            + BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT
+                            + 3;
 
 const INODE_STARTING_POS: usize = FS_DESCRIPTOR_SIZE;
 
-#[derive(Default)]
+const MAX_SUPPORTED_INODE_COUNT: u16 = 512;
+const BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT: usize = MAX_SUPPORTED_INODE_COUNT as usize / 8;
+
 struct FsDescriptor {
+    pub total_inodes: u16,
+    pub free_inode_list_idx: [u8; MAX_SUPPORTED_INODE_COUNT as usize / 8],
     pub version: [u8; 3],
-    reserved: [u8; (FS_DESCRIPTOR_SIZE - FS_USED_SIZE)]
+    reserved: [u8; FS_DESCRIPTOR_SIZE - FS_USED_SIZE]
 }
 
-use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, iter, os::unix::fs::FileExt};
-use std::collections::LinkedList;
-use crate::inode::MAX_CHILDREN_COUNT;
+impl Default for FsDescriptor {
+    fn default() -> Self {
+        FsDescriptor {
+            total_inodes: 0,
+            free_inode_list_idx: [0; BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT],
+            version: [0; 3],
+            reserved: [0; FS_DESCRIPTOR_SIZE - FS_USED_SIZE]
+        }
+    }
+}
 
-use super::inode::{ Inode, INODE_SIZE, MAX_FILE_NAME_SIZE, FileTypes };
+use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
+use std::collections::LinkedList;
+
+use super::inode::{ Inode, INODE_SIZE, MAX_CHILDREN_COUNT, MAX_FILE_NAME_SIZE, FileTypes };
 
 struct ffs {
     opened_file: Option<File>,
@@ -29,7 +45,8 @@ struct ffs {
     size: u32,
     root_inode: Inode,
     cwd: Inode,
-    free_inodes: LinkedList<u16>
+    free_inodes: LinkedList<u16>,
+    free_blocks: LinkedList<u16>
 }
 
 trait Path {
@@ -91,7 +108,8 @@ impl Default for ffs {
             size: 0,
             root_inode: Inode::default(),
             cwd: Inode::default(),
-            free_inodes: LinkedList::new()
+            free_inodes: LinkedList::new(),
+            free_blocks: LinkedList::new()
         }
     }
 }
@@ -109,22 +127,35 @@ macro_rules! iter_children {
     };
 }
 
+impl Drop for ffs {
+    fn drop(&mut self) {
+        let _ = self.flush_to_file();
+    }
+}
+
 impl ffs {
-    pub fn new(file_name: String, size: u32) -> Option<Self> {
+    pub fn new(file_name: String, size: u32, new: bool) -> Option<Self> {
         let mut inst = ffs::default();
         inst.name = file_name;
         inst.size = size;
 
-        match inst.init() {
+        match inst.init(new) {
             Ok(f) => {
                 Some(inst)
             },
             Err(_) => None
         }
-
     }
 
-    fn init(&mut self) -> Result<(), String> {
+    fn init(&mut self, new: bool) -> Result<(), String> {
+        if new {
+            self.create_new()
+        } else {
+            Err(String::from("Currently not supporting"))
+        }
+    }
+
+    fn create_new(&mut self) -> Result<(), String> {
         let ff = OpenOptions::new()
                             .create(true)
                             .read(true)
@@ -158,7 +189,22 @@ impl ffs {
         }
     }
 
-    fn write_fs_desc(&mut self) -> Result<(), String>{
+    fn read_fs_desc(&self) -> Result<FsDescriptor, String> {
+        let f = self.opened_file.as_ref().unwrap();
+        
+        let mut desc = FsDescriptor::default();
+        let desc_bytes = unsafe {
+            std::slice::from_raw_parts_mut(
+                &mut desc as *mut FsDescriptor as *mut u8, FS_DESCRIPTOR_SIZE)
+        };
+        
+        match f.read_exact_at(desc_bytes, 0) {
+            Ok(_) => Ok(desc),
+            Err(err) => Err(String::from("error in reading fs descriptor"))
+        }
+    }
+
+    fn write_fs_desc(&mut self) -> Result<(), String> {
         let f = self.opened_file.as_mut().unwrap();
 
         if f.seek(SeekFrom::Start(0)).is_err() {
@@ -191,7 +237,7 @@ impl ffs {
         } else if self.size <= 10 * 1024 * 1024 {
             64u16
         } else {
-            512u16
+            MAX_SUPPORTED_INODE_COUNT
         }
     }
 
@@ -339,23 +385,26 @@ impl ffs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fmt::Debug, fs::remove_file};
+    use std::fs::remove_file;
 
     #[test]
     fn test_fs() {
         let fs = ffs::new(
             "test_fs.dat".to_string(),
-            1024 * 1024 * 10);
+            1024 * 1024 * 10,
+            true
+        );
         assert!(fs.is_some());
         let fs = fs.unwrap();
-        remove_file(fs.name).unwrap();
     }
 
     #[test]
     fn test_fs_touch() {
         let fs = ffs::new(
             "test_fs_touch.dat".to_string(),
-            1024 * 1024 * 10);
+            1024 * 1024 * 10,
+            true
+        );
         assert!(fs.is_some());
         let mut fs = fs.unwrap();
 
@@ -384,7 +433,8 @@ mod tests {
     fn test_ls() {
         let fs = ffs::new(
             "test_ls.dat".to_string(),
-            1024 * 1024 * 10);
+            1024 * 1024 * 10, 
+            true);
         assert!(fs.is_some());
         let mut fs = fs.unwrap();
         
@@ -397,18 +447,31 @@ mod tests {
         assert!(items.len() == 63)
     }
 
+    #[test]
     fn test_mkdir_cd() {
         let fs = ffs::new(
             "test_mkdir_cd.dat".to_string(),
-            1024 * 1024 * 10);
+            1024 * 1024 * 10, true);
         assert!(fs.is_some());
         let mut fs = fs.unwrap();
 
+        assert_eq!(fs.get_cwd().name.as_slice().string(), "/");
         fs.mkdir("dir1");
+
+        let x = fs.ls().ok().unwrap();
+        assert_eq!(x.len(), 1);
+        assert_eq!(x[0].name, "dir1");
+        
         fs.cd("dir1");
+        assert_eq!(fs.get_cwd().name.as_slice().string(), "dir1");
 
+        let x = fs.ls().ok().unwrap();
+        assert_eq!(x.len(), 0);
 
-
+        fs.cd("..");
+        let x = fs.ls().ok().unwrap();
+        assert_eq!(x.len(), 1);
+        assert_eq!(x[0].name, "dir1");
     }
 
 }
