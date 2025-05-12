@@ -1,17 +1,18 @@
 
 
-const BLOCK_SIZE: usize = 4 * 1024;
+const BLOCK_SIZE: usize = 4 << 10;
 const BLOCK_DATA_SIZE: usize = BLOCK_SIZE - 8;
 
-/*
-    We will use a linked list kind of approach while
-    implementing the data blocks.
-    
-    This way we can eliminate the fragmentation problem.
-    
-    However this method has its own cons, but its okay 
-    for a temp file system.
-*/
+use bitmaps::Bitmap;
+
+
+pub struct SuperBlock {
+    version: u16,
+    total_inodes: u16,
+    total_blocks: u16,
+    inode_size_log: u8,
+    block_size_log: u8,
+}
 
 pub struct Block {
     pub block_number: u32,
