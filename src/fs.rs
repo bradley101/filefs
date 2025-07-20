@@ -1,10 +1,6 @@
 
 
-const NUM_RELEASED_VERSIONS: usize = 1;
-const VALID_FS_VERSIONS: [[u8; 3]; NUM_RELEASED_VERSIONS]  = [
-    [0, 0, 1]
-];
-const CURRENT_FS_VERSION_IDX: usize = 0;
+
 
 const FS_DESCRIPTOR_SIZE: usize = 128;
 const FS_USED_SIZE: usize = 2
@@ -16,72 +12,15 @@ const INODE_STARTING_POS: usize = FS_DESCRIPTOR_SIZE;
 const MAX_SUPPORTED_INODE_COUNT: u16 = 512;
 const BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT: usize = MAX_SUPPORTED_INODE_COUNT as usize / 8;
 
-struct FsDescriptor {
-    pub total_inodes: u16,
-    pub free_inode_list_idx: [u8; MAX_SUPPORTED_INODE_COUNT as usize / 8],
-    pub version: [u8; 3],
-    reserved: [u8; FS_DESCRIPTOR_SIZE - FS_USED_SIZE]
-}
-
-impl Default for FsDescriptor {
-    fn default() -> Self {
-        FsDescriptor {
-            total_inodes: 0,
-            free_inode_list_idx: [0; BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT],
-            version: [0; 3],
-            reserved: [0; FS_DESCRIPTOR_SIZE - FS_USED_SIZE]
-        }
-    }
-}
-
 use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
-use std::collections::LinkedList;
 
-use super::inode::{ Inode, INODE_SIZE, MAX_CHILDREN_COUNT, MAX_FILE_NAME_SIZE, FileTypes };
+use crate::block::SuperBlock;
+
+use super::inode::{ Inode, INODE_SIZE, MAX_CHILDREN_COUNT, MAX_FILE_NAME_SIZE, FileType };
 
 struct ffs {
-    opened_file: Option<File>,
-    name: String,
-    size: u32,
-    root_inode: Inode,
+    underlying_file: Option<File>,
     cwd: Inode,
-    free_inodes: LinkedList<u16>,
-    free_blocks: LinkedList<u16>
-}
-
-trait Path {
-    fn byte_array(&self) -> &[u8];
-    fn string(&self) -> String;
-}
-
-impl Path for String {
-    fn byte_array(&self) -> &[u8] {
-        self.as_bytes()
-    }
-
-    fn string(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl Path for &str {
-    fn byte_array(&self) -> &[u8] {
-        self.as_bytes()
-    }
-
-    fn string(&self) -> String {
-        String::from(*self)
-    }
-}
-
-impl Path for &[u8] {
-    fn byte_array(&self) -> &[u8] {
-        *self
-    }
-
-    fn string(&self) -> String {
-        String::from_utf8_lossy(*self).trim_end_matches('\0').to_string()
-    }
 }
 
 struct DirItem {
@@ -103,13 +42,8 @@ impl DirItem {
 impl Default for ffs {
     fn default() -> Self {
         ffs {
-            opened_file: None,
-            name: String::new(),
-            size: 0,
-            root_inode: Inode::default(),
             cwd: Inode::default(),
-            free_inodes: LinkedList::new(),
-            free_blocks: LinkedList::new()
+            underlying_file: None,
         }
     }
 }
@@ -136,10 +70,8 @@ impl Drop for ffs {
 impl ffs {
     pub fn new(file_name: String, size: u32, new: bool) -> Option<Self> {
         let mut inst = ffs::default();
-        inst.name = file_name;
-        inst.size = size;
 
-        match inst.init(new) {
+        match inst.init(new, &file_name, size) {
             Ok(f) => {
                 Some(inst)
             },
@@ -147,15 +79,15 @@ impl ffs {
         }
     }
 
-    fn init(&mut self, new: bool) -> Result<(), String> {
+    fn init(&mut self, new: bool, file_name: &String, size: u32) -> Result<(), String> {
         if new {
-            self.create_new()
+            self.create_new(file_name, size)
         } else {
             Err(String::from("Currently not supporting"))
         }
     }
 
-    fn create_new(&mut self) -> Result<(), String> {
+    fn create_new(&mut self, file_name: &String, size: u32) -> Result<(), String> {
         let ff = OpenOptions::new()
                             .create(true)
                             .read(true)
@@ -165,7 +97,7 @@ impl ffs {
             return Err(ff.err().unwrap().to_string());
         }
 
-        self.opened_file = Some(ff.unwrap());
+        self.underlying_file = Some(ff.unwrap());
 
         match self.write_fs_desc() {
             Err(err) => return Err(err),
@@ -204,31 +136,21 @@ impl ffs {
         }
     }
 
-    fn write_fs_desc(&mut self) -> Result<(), String> {
+    fn write_super_block(&mut self, fs_size: u32, block_size: u32, bytes_per_inode: u32) -> Result<(), String> {
         let f = self.opened_file.as_mut().unwrap();
 
         if f.seek(SeekFrom::Start(0)).is_err() {
             return Err(String::from("Unable to seek to start"));
         }
 
-        let mut fs_desc = FsDescriptor::default();
-        fs_desc.version = VALID_FS_VERSIONS[CURRENT_FS_VERSION_IDX].clone();
+        let mut new_super_block = 
+            SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
 
-        let bytes = unsafe {
-            std::slice::from_raw_parts(
-                &fs_desc as *const FsDescriptor as *const u8,
-                std::mem::size_of::<FsDescriptor>())
-        };
-
-        match f.write_all(&bytes) {
-            Ok(_) => {
-                match f.write_all(&vec![0u8; self.size as usize - bytes.len()]) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(err.to_string())
-                }
-            },
-            Err(err) => Err(err.to_string())
-        }
+        
+        Ok(())
+        
+        
+        
     }
 
     fn get_max_inode_count(&self) -> u16 {
@@ -299,7 +221,7 @@ impl ffs {
     }
 
     fn create_item<T: Path>(&mut self, name: T, file_type: FileTypes) -> Result<(), String> {
-        if self.free_inodes.is_empty() && self.get_children_count(&self.cwd) == MAX_CHILDREN_COUNT {
+        if self.free_inodes.is_empty() || self.get_children_count(&self.cwd) == MAX_CHILDREN_COUNT {
             return Err(String::from("no space left"));
         }
         
