@@ -15,13 +15,14 @@ use bitvec::prelude::*;
 use super::block::BlockBitmap;
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub enum FileType {
+    #[default]
     File = 0_u8,
     Directory = 1
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct Inode {
     pub inode_number: u16,
     pub parent: u16,
@@ -32,7 +33,7 @@ pub struct Inode {
     pub file_size: u32,
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct InodeBitmap {
     bitmap: BitVec<u8>
 }
@@ -40,7 +41,7 @@ pub struct InodeBitmap {
 impl InodeBitmap {
     pub fn new(num_inodes: usize) -> Self {
         let mut bitmap = BitVec::with_capacity(num_inodes);
-        bitmap.fill(false);
+        bitmap.fill(true);
         Self {
             bitmap
         }

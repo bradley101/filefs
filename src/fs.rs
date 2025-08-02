@@ -14,64 +14,50 @@ const BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT: usize = MAX_SUPPORTED_INODE_C
 
 use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 
-use crate::block::SuperBlock;
+use crate::block::{SuperBlock, SUPER_BLOCK_FILE_OFFSET};
 
 use super::inode::{ Inode, INODE_SIZE, MAX_CHILDREN_COUNT, MAX_FILE_NAME_SIZE, FileType };
 
 struct ffs {
+    super_block: SuperBlock,
     underlying_file: Option<File>,
     cwd: Inode,
-}
-
-struct DirItem {
-    name: String,
-    item_type: u8,
-    size: u16
-}
-
-impl DirItem {
-    pub fn from(inode: &Inode) -> Self {
-        Self {
-            name: String::from_utf8_lossy(&inode.name).trim_end_matches('\0').to_string(),
-            item_type: inode.file_type,
-            size: inode.file_size
-        }
-    }
 }
 
 impl Default for ffs {
     fn default() -> Self {
         ffs {
+            super_block: SuperBlock::default(),
             cwd: Inode::default(),
             underlying_file: None,
         }
     }
 }
 
-macro_rules! iter_children {
-    ($fs:expr) => {
-        $fs.cwd.childrens
-            .iter()
-            .filter(|child_inode| {   
-                **child_inode > 0
-            })
-            .map(|child_inode| {
-                $fs.fetch_inode(*child_inode).ok().unwrap()
-            })
-    };
-}
+// macro_rules! iter_children {
+//     ($fs:expr) => {
+//         $fs.cwd.childrens
+//             .iter()
+//             .filter(|child_inode| {   
+//                 **child_inode > 0
+//             })
+//             .map(|child_inode| {
+//                 $fs.fetch_inode(*child_inode).ok().unwrap()
+//             })
+//     };
+// }
 
 impl Drop for ffs {
     fn drop(&mut self) {
-        let _ = self.flush_to_file();
+        // let _ = self.flush_to_file();
     }
 }
 
 impl ffs {
-    pub fn new(file_name: String, size: u32, new: bool) -> Option<Self> {
+    pub fn new(file_name: String, size: u32, block_size: u32, bytes_per_inode: u32, new: bool) -> Option<Self> {
         let mut inst = ffs::default();
 
-        match inst.init(new, &file_name, size) {
+        match inst.init(new, &file_name, size, block_size, bytes_per_inode) {
             Ok(f) => {
                 Some(inst)
             },
@@ -79,80 +65,78 @@ impl ffs {
         }
     }
 
-    fn init(&mut self, new: bool, file_name: &String, size: u32) -> Result<(), String> {
+    fn init
+        (&mut self, new: bool, file_name: &String, size: u32, block_size: u32, bytes_per_inode: u32)
+        -> Result<(), std::io::Error>
+    {
         if new {
-            self.create_new(file_name, size)
-        } else {
-            Err(String::from("Currently not supporting"))
+            return self.create_new(file_name, size, block_size, bytes_per_inode)
         }
+        panic!("Unsupported operation: ffs::init called with new = false. This is not implemented yet.");
     }
 
-    fn create_new(&mut self, file_name: &String, size: u32) -> Result<(), String> {
+    fn create_new
+        (&mut self, file_name: &String, size: u32, block_size: u32, bytes_per_inode: u32)
+        -> Result<(), std::io::Error>
+    {
         let ff = OpenOptions::new()
                             .create(true)
                             .read(true)
                             .write(true)
-                            .open(self.name.clone());
+                            .open(file_name.clone());
         if ff.is_err() {
-            return Err(ff.err().unwrap().to_string());
+            return Err(ff.err().unwrap());
         }
 
         self.underlying_file = Some(ff.unwrap());
 
-        match self.write_fs_desc() {
-            Err(err) => return Err(err),
-            _ => {}
+        if let Err(err) = self.create_new_super_block(size, block_size, bytes_per_inode) {
+            return Err(err);
         }
 
-        self.create_root_inode();
-        self.init_free_inodes_list();
+        // self.create_root_inode();
+        // self.init_free_inodes_list();
 
-        self.cwd = self.root_inode.clone();
+        // self.cwd = self.root_inode.clone();
 
         Ok(())
     }
 
-    fn init_free_inodes_list(&mut self) {
-        self.free_inodes.clear();
+    // fn init_free_inodes_list(&mut self) {
+    //     self.free_inodes.clear();
         
-        // Not including the root inode number "0" in the free inode list
-        for inode_number in 1..self.get_max_inode_count() {
-            self.free_inodes.push_back(inode_number);
+    //     // Not including the root inode number "0" in the free inode list
+    //     for inode_number in 1..self.get_max_inode_count() {
+    //         self.free_inodes.push_back(inode_number);
+    //     }
+    // }
+
+    fn create_new_super_block
+        (&mut self, fs_size: u32, block_size: u32, bytes_per_inode: u32)
+        -> Result<(), std::io::Error>
+    {
+        let super_block = SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
+        let tmp_res = self.persist_super_block(&super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
         }
-    }
-
-    fn read_fs_desc(&self) -> Result<FsDescriptor, String> {
-        let f = self.opened_file.as_ref().unwrap();
-        
-        let mut desc = FsDescriptor::default();
-        let desc_bytes = unsafe {
-            std::slice::from_raw_parts_mut(
-                &mut desc as *mut FsDescriptor as *mut u8, FS_DESCRIPTOR_SIZE)
-        };
-        
-        match f.read_exact_at(desc_bytes, 0) {
-            Ok(_) => Ok(desc),
-            Err(err) => Err(String::from("error in reading fs descriptor"))
-        }
-    }
-
-    fn write_super_block(&mut self, fs_size: u32, block_size: u32, bytes_per_inode: u32) -> Result<(), String> {
-        let f = self.opened_file.as_mut().unwrap();
-
-        if f.seek(SeekFrom::Start(0)).is_err() {
-            return Err(String::from("Unable to seek to start"));
-        }
-
-        let mut new_super_block = 
-            SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
-
-        
+        self.super_block = super_block;
         Ok(())
-        
-        
-        
     }
 
+    fn persist_super_block(&mut self, super_block: &SuperBlock) -> Result<(), std::io::Error> {
+        let f = self.underlying_file.as_mut().unwrap();
+        
+        {
+            let tmp_res = f.seek(SeekFrom::Start(SUPER_BLOCK_FILE_OFFSET));
+            if tmp_res.is_err() {
+                return Err(tmp_res.err().unwrap());
+            }
+        }
+
+        super_block.persist(f)
+    }
+/*
     fn get_max_inode_count(&self) -> u16 {
         if self.size <= 1024 * 1024 {
             8u16
@@ -255,7 +239,6 @@ impl ffs {
         self.create_item(dir_name, FileTypes::Directory)
     }
 
-
     fn touch<T: Path>(&mut self, name: T) -> Result<(), String> {
         self.create_item(name, FileTypes::File)
     }
@@ -301,7 +284,7 @@ impl ffs {
     fn flush_to_file(&mut self) -> Result<(), std::io::Error> {
         self.opened_file.as_mut().unwrap().flush()
     }
-
+ */
 }
 
 #[cfg(test)]
@@ -311,15 +294,23 @@ mod tests {
 
     #[test]
     fn test_fs() {
+        const TEST_FS_SIZE: u32 = 10 * (1 << 20); // 10 MB
+        const BLOCK_SIZE: u32 = 4 * (1 << 10); // 4 KB
+        const BYTES_PER_INODE: u32 = 1 << 8; // 256 bytes per inode
+        let FILE_NAME = "test_fs.dat".to_string();
+
         let fs = ffs::new(
-            "test_fs.dat".to_string(),
-            1024 * 1024 * 10,
+            FILE_NAME,
+            TEST_FS_SIZE,
+            BLOCK_SIZE,
+            BYTES_PER_INODE,
             true
         );
         assert!(fs.is_some());
         let fs = fs.unwrap();
     }
 
+    /*
     #[test]
     fn test_fs_touch() {
         let fs = ffs::new(
@@ -395,7 +386,7 @@ mod tests {
         assert_eq!(x.len(), 1);
         assert_eq!(x[0].name, "dir1");
     }
-
+     */
 }
 
 
