@@ -17,8 +17,9 @@ pub struct SuperBlock {
     free_blocks: u16,
     inode_size_log: u8,
     block_size_log: u8,
-    inode_bitmap: InodeBitmap,
-    block_bitmap: BlockBitmap,
+    // For Now - We will use block 2 for inode bitmap and block 3 for block bitmap
+    // inode_bitmap_block_count: u8, // This field is not used in the current implementation
+    // block_bitmap_block_count: u8, // This field is not used in the current implementation
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -26,6 +27,7 @@ pub struct BlockBitmap {
     bitmap: BitVec<u8>
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
 pub struct Block {
     pub data: Vec<u8>,
 }
@@ -43,15 +45,17 @@ impl SuperBlock {
             free_blocks: tb,
             block_size_log: block_size.ilog2() as u8,
             inode_size_log: 8,
-            inode_bitmap: InodeBitmap::new(ti as usize),
-            block_bitmap: BlockBitmap::new(tb as usize),
         }
     }
 
-    pub fn persist(&self, file: &mut File) -> std::io::Result<()> {
-        // use serde to serialize and write this superblock in the file
-        let serialized = bincode::serialize(self).expect("Failed to serialize SuperBlock");
-        file.write_all(serialized.as_slice())
+    // pub fn persist(&self, file: &mut File) -> std::io::Result<()> {
+    //     // use serde to serialize and write this superblock in the file
+    //     let serialized = bincode::serialize(self).expect("Failed to serialize SuperBlock");
+    //     file.write_all(serialized.as_slice())
+    // }
+
+    pub fn get_total_inodes(&self) -> usize {
+        self.total_inodes as usize
     }
 }
 
@@ -59,11 +63,6 @@ impl BlockBitmap {
     pub fn new(num_blocks: usize) -> Self {
         let mut bitmap = bitvec![u8, Lsb0; 0; num_blocks];
         bitmap.fill(false);
-        bitmap.set(10, true);
-
-        assert_eq!(bitmap.len(), num_blocks);
-        assert_eq!(bitmap.capacity(), num_blocks);
-
         Self {
             bitmap
         }

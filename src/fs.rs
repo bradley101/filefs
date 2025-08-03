@@ -17,6 +17,7 @@ use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::
 use crate::block::{SuperBlock, SUPER_BLOCK_FILE_OFFSET};
 
 use super::inode::{ Inode, INODE_SIZE, MAX_CHILDREN_COUNT, MAX_FILE_NAME_SIZE, FileType };
+use bitvec::prelude::*;
 
 struct ffs {
     super_block: SuperBlock,
@@ -121,6 +122,10 @@ impl ffs {
             return Err(tmp_res.err().unwrap());
         }
         self.super_block = super_block;
+
+        // Create the Inode Bitmap
+        let mut inode_bitmap = bitvec![u8, Lsb0; 0; self.super_block.get_total_inodes()];
+        
         Ok(())
     }
 
