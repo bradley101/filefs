@@ -12,6 +12,8 @@ pub const USABLE_INODE_SIZE: usize = 2
                                 + (2 * MAX_CHILDREN_COUNT);
 
 use bitvec::prelude::*;
+use crate::block::Block;
+
 use super::block::BlockBitmap;
 
 #[repr(u8)]
@@ -22,7 +24,7 @@ pub enum FileType {
     Directory = 1
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Clone, Default)]
 pub struct Inode {
     pub inode_number: u16,
     pub parent: u16,
@@ -33,15 +35,15 @@ pub struct Inode {
     pub file_size: u32,
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Clone, Default)]
 pub struct InodeBitmap {
     bitmap: BitVec<u8>
 }
 
 impl InodeBitmap {
     pub fn new(num_inodes: usize) -> Self {
-        let mut bitmap = BitVec::with_capacity(num_inodes);
-        bitmap.fill(true);
+        let mut bitmap = bitvec![u8, Lsb0; 0; num_inodes];
+        bitmap.fill(false);
         Self {
             bitmap
         }
@@ -53,9 +55,13 @@ impl InodeBitmap {
         file.write_all(serialized.as_slice())
     }
 
-    fn serialize(&self) -> Vec<u8> {
-        let buffer: Vec<u8> = Vec::new();
-        buffer.extend_from_slice(self.bitmap.);
+    fn serialize(&self) -> Vec<Block> {
+        let mut blocks: Vec<Block> = Vec::new();
+
+        
+
+        blocks
+
     }
 }
 

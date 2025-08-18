@@ -25,9 +25,8 @@ pub struct SuperBlock {
     total_inode_blocks: u16,
 }
 
-#[derive(Clone)]
-pub struct BlockBitmap<'a> {
-    super_block_ref: &'a SuperBlock,
+#[derive(Clone, Default)]
+pub struct BlockBitmap {
     bitmap: BitVec<u8>
 }
 
@@ -63,7 +62,7 @@ impl SuperBlock {
     pub fn persist(&self, file: &mut File) -> std::io::Result<()> {
         // use serde to serialize and write this superblock in the file
         let buffer = self.serialize();
-        file.write_all(buffer.as_slice())
+        file.write_all(buffer.data.as_slice())
     }
 
     #[inline(always)]
@@ -81,7 +80,7 @@ impl SuperBlock {
         1 << self.block_size_log
     }
 
-    fn serialize(&self) -> Vec<u8> {
+    fn serialize(&self) -> Block {
         let mut buffer: Vec<u8> = Vec::new();
         // serialize all the fields of the superblock into buffer
         buffer.extend_from_slice(&self.version);
@@ -96,28 +95,30 @@ impl SuperBlock {
         buffer.extend_from_slice(&self.inode_start_block.to_le_bytes());
         buffer.extend_from_slice(&self.total_inode_blocks.to_le_bytes());
 
-        buffer
+        Block {
+            block_number: 0, // Superblock is always at block number 0
+            data: buffer,
+        }
     }
 }
 
-impl<'a> BlockBitmap<'a> {
-    pub fn new(num_blocks: usize, super_block_ref: &'a SuperBlock) -> Self {
+impl BlockBitmap {
+    pub fn new(num_blocks: usize) -> Self {
         let mut bitmap = bitvec![u8, Lsb0; 0; num_blocks];
         bitmap.fill(false);
         Self {
-            super_block_ref: super_block_ref,
             bitmap: bitmap
         }
     }
 
-    fn serialize(&self) -> Vec<Block> {
+    fn serialize(&self, super_block_ref: &SuperBlock) -> Vec<Block> {
         let mut blocks: Vec<Block> = Vec::new();
-        let total_bitmap_blocks = self.super_block_ref.block_bitmap_block_count as usize;
+        let total_bitmap_blocks = super_block_ref.block_bitmap_block_count as usize;
         let bitmap_vec = self.bitmap.as_raw_slice();
 
         for i in 0..total_bitmap_blocks {
-            let start = i * self.super_block_ref.get_block_size();
-            let end = start + self.super_block_ref.get_block_size();
+            let start = i * super_block_ref.get_block_size();
+            let end = start + super_block_ref.get_block_size();
             let data = if end > bitmap_vec.len() {
                 &bitmap_vec[start..]
             } else {
@@ -130,5 +131,9 @@ impl<'a> BlockBitmap<'a> {
         }        
 
         blocks
+    }
+
+    fn serialize_to_vec(&self) -> Vec<u8> {
+        self.bitmap.as_raw_slice().to_vec()
     }
 }
