@@ -46,6 +46,17 @@ impl InodeBitmap {
             bitmap
         }
     }
+
+    pub fn persist(&self, file: &mut std::fs::File) -> std::io::Result<()> {
+        // Serialize the bitmap and write it to the file
+        let serialized = bincode::serialize(self).expect("Failed to serialize InodeBitmap");
+        file.write_all(serialized.as_slice())
+    }
+
+    fn serialize(&self) -> Vec<u8> {
+        let buffer: Vec<u8> = Vec::new();
+        buffer.extend_from_slice(self.bitmap.);
+    }
 }
 
 
