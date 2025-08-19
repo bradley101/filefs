@@ -1,7 +1,7 @@
 
 
 use core::num;
-use std::{fs::File, io::Write};
+use std::{fs::File, io::{Seek, SeekFrom, Write}};
 
 use bitvec::prelude::*;
 use crate::inode::INODE_SIZE;
@@ -80,6 +80,11 @@ impl SuperBlock {
         1 << self.block_size_log
     }
 
+    #[inline(always)]
+    pub fn get_inode_bitmap_block_count(&self) -> usize {
+        self.inode_bitmap_block_count as usize
+    }
+
     fn serialize(&self) -> Block {
         let mut buffer: Vec<u8> = Vec::new();
         // serialize all the fields of the superblock into buffer
@@ -111,6 +116,26 @@ impl BlockBitmap {
         }
     }
 
+    pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+        let blocks = self.serialize(super_block_ref);
+
+        let tmp_res = 
+            file.seek(SeekFrom::Start(blocks[0].block_number as u64 * super_block_ref.get_block_size() as u64));
+        
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        for block in blocks {
+            let tmp_res = file.write_all(&block.data);
+            if tmp_res.is_err() {
+                return Err(tmp_res.err().unwrap());
+            }
+        }
+
+        Ok(())
+    }
+
     fn serialize(&self, super_block_ref: &SuperBlock) -> Vec<Block> {
         let mut blocks: Vec<Block> = Vec::new();
         let total_bitmap_blocks = super_block_ref.block_bitmap_block_count as usize;
@@ -125,7 +150,7 @@ impl BlockBitmap {
                 &bitmap_vec[start..end]
             };
             blocks.push(Block {
-                block_number: i as u16,
+                block_number: (1 + super_block_ref.get_inode_bitmap_block_count() + i) as u16,
                 data: data.to_vec(),
             });
         }        

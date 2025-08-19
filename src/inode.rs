@@ -11,8 +11,12 @@ pub const USABLE_INODE_SIZE: usize = 2
                                 + 2
                                 + (2 * MAX_CHILDREN_COUNT);
 
+pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 2;
+
+use std::{io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
+
 use bitvec::prelude::*;
-use crate::block::Block;
+use crate::block::{Block, SuperBlock};
 
 use super::block::BlockBitmap;
 
@@ -49,15 +53,44 @@ impl InodeBitmap {
         }
     }
 
-    pub fn persist(&self, file: &mut std::fs::File) -> std::io::Result<()> {
-        // Serialize the bitmap and write it to the file
-        let serialized = bincode::serialize(self).expect("Failed to serialize InodeBitmap");
-        file.write_all(serialized.as_slice())
+    pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+        let blocks = self.serialize(super_block_ref);
+        
+        let tmp_res = 
+            file.seek(SeekFrom::Start(blocks[0].block_number as u64 * super_block_ref.get_block_size() as u64));
+        
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        for block in blocks {
+            let tmp_res = file.write_all(&block.data);
+            if tmp_res.is_err() {
+                return Err(tmp_res.err().unwrap());
+            }
+        }
+
+        Ok(())
     }
 
-    fn serialize(&self) -> Vec<Block> {
+    fn serialize(&self, super_block_ref: &SuperBlock) -> Vec<Block> {
         let mut blocks: Vec<Block> = Vec::new();
+        let total_inode_bitmap_blocks = super_block_ref.get_inode_bitmap_block_count();
+        let bitmap_vec = self.bitmap.as_raw_slice();
 
+        for i in 0..total_inode_bitmap_blocks {
+            let start = i * super_block_ref.get_block_size();
+            let end = start + super_block_ref.get_block_size();
+            let data = if end > bitmap_vec.len() {
+                &bitmap_vec[start..]
+            } else {
+                &bitmap_vec[start..end]
+            };
+            blocks.push(Block {
+                block_number: (i + INODE_BITMAP_STARTING_BLOCK_NUMBER) as u16,
+                data: data.to_vec(),
+            });
+        }
         
 
         blocks

@@ -23,6 +23,8 @@ struct ffs {
     super_block: SuperBlock,
     underlying_file: Option<File>,
     cwd: Inode,
+    inode_bitmap: InodeBitmap,
+    block_bitmap: BlockBitmap,
 }
 
 impl Default for ffs {
@@ -31,6 +33,8 @@ impl Default for ffs {
             super_block: SuperBlock::default(),
             cwd: Inode::default(),
             underlying_file: None,
+            inode_bitmap: InodeBitmap::default(),
+            block_bitmap: BlockBitmap::default(),
         }
     }
 }
@@ -124,10 +128,19 @@ impl ffs {
         self.super_block = super_block;
 
         // Create the Inode Bitmap
-        let mut inode_bitmap = InodeBitmap::new(self.super_block.get_total_inodes());
-        let mut block_bitmap = BlockBitmap::new(self.super_block.get_total_blocks());
-
-        // tmp_res = self.persist
+        let inode_bitmap = InodeBitmap::new(self.super_block.get_total_inodes());
+        let tmp_res = self.persist_inode_bitmap(&inode_bitmap);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+        self.inode_bitmap = inode_bitmap;
+        
+        let block_bitmap = BlockBitmap::new(self.super_block.get_total_blocks());
+        let tmp_res = self.persist_block_bitmap(&block_bitmap);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+        self.block_bitmap = block_bitmap;
 
         Ok(())
     }
@@ -145,13 +158,12 @@ impl ffs {
 
     fn persist_inode_bitmap(&mut self, inode_bitmap: &InodeBitmap) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-        
-        let tmp_res = f.seek(SeekFrom::Start(self.super_block.get_block_size()));
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
+        inode_bitmap.persist(f, &self.super_block)
+    }
 
-        inode_bitmap.persist(f)
+    fn persist_block_bitmap(&mut self, block_bitmap: &BlockBitmap) -> Result<(), std::io::Error> {
+        let f = self.underlying_file.as_mut().unwrap();
+        block_bitmap.persist(f, &self.super_block)
     }
 /*
     fn get_max_inode_count(&self) -> u16 {
