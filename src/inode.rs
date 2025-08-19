@@ -39,6 +39,39 @@ pub struct Inode {
     pub file_size: u32,
 }
 
+impl Inode {
+    pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+        let buffer = self.serialize();
+        file.write_all_at(buffer.as_slice(),
+            super_block_ref.get_inode_start_block() as u64 + (INODE_SIZE as u64 * self.inode_number as u64))
+    }
+
+    fn serialize(&self) -> Vec<u8> {
+        let mut buffer: Vec<u8> = Vec::with_capacity(INODE_SIZE);
+
+        buffer.extend_from_slice(&self.inode_number.to_le_bytes());
+        buffer.extend_from_slice(&self.parent.to_le_bytes());
+
+        let name_bytes = self.name.as_bytes();
+        let mut name_buffer = vec![0_u8; MAX_FILE_NAME_SIZE];
+        name_buffer[..name_bytes.len().min(MAX_FILE_NAME_SIZE)].copy_from_slice(&name_bytes[..name_bytes.len().min(MAX_FILE_NAME_SIZE)]);
+        buffer.extend_from_slice(&name_buffer);
+
+        for &block in &self.data_blocks {
+            buffer.extend_from_slice(&block.to_le_bytes());
+        }
+
+        buffer.extend_from_slice(self.block_bitmap.serialize_to_vec().as_slice());
+
+        buffer.push(self.file_type as u8);
+        buffer.extend_from_slice(&self.file_size.to_le_bytes());
+
+
+        buffer.resize(INODE_SIZE, 0); // Ensure the buffer is exactly INODE_SIZE
+        buffer
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct InodeBitmap {
     bitmap: BitVec<u8>
@@ -95,6 +128,10 @@ impl InodeBitmap {
 
         blocks
 
+    }
+
+    pub fn allocate_inode(&mut self, inode_num: u16) {
+        self.bitmap.set(inode_num as usize, true);
     }
 }
 

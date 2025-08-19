@@ -99,7 +99,7 @@ impl ffs {
             return Err(err);
         }
 
-        // self.create_root_inode();
+        self.create_root_inode();
         // self.init_free_inodes_list();
 
         // self.cwd = self.root_inode.clone();
@@ -165,47 +165,29 @@ impl ffs {
         let f = self.underlying_file.as_mut().unwrap();
         block_bitmap.persist(f, &self.super_block)
     }
-/*
-    fn get_max_inode_count(&self) -> u16 {
-        if self.size <= 1024 * 1024 {
-            8u16
-        } else if self.size <= 10 * 1024 * 1024 {
-            64u16
-        } else {
-            MAX_SUPPORTED_INODE_COUNT
+    
+    fn create_root_inode(&mut self) -> Result<(), std::io::Error> {
+        let f = self.underlying_file.as_mut().unwrap();
+        let mut root_inode = Inode::default();
+        root_inode.name = String::from("/");
+        root_inode.inode_number = 0;
+        root_inode.file_type = FileType::Directory;
+        
+        let tmp_res = root_inode.persist(f, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
         }
+
+        self.inode_bitmap.allocate_inode(0);
+        self.inode_bitmap.persist(f, &self.super_block)
     }
 
-    fn create_root_inode(&mut self) -> Result<(), String> {
-        let mut root_inode = Inode::default();
-        let root_name_bytes = "/".as_bytes();
-        root_inode.name[..root_name_bytes.len().min(MAX_FILE_NAME_SIZE)].copy_from_slice(&root_name_bytes[..]);
-        root_inode.file_type = 1;
-        match self.persist_inode(&root_inode) {
-            Ok(_) => {
-                self.root_inode = root_inode;
-                Ok(())
-            },
-            Err(err) => Err(err)
-        }
-        
-    }
+/*
 
     fn get_inode_offset(inode_number: u16) -> usize {
         INODE_STARTING_POS + (INODE_SIZE * inode_number as usize)
     }
 
-    fn persist_inode(&mut self, inode: &Inode) -> Result<(), String> {
-        let inode_offset = ffs::get_inode_offset(inode.inode_number);
-
-        let inode_bytes= inode.serialize();
-        let of = self.opened_file.as_mut().unwrap();
-
-        match of.write_all_at(&inode_bytes, inode_offset as u64) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err.to_string())
-        }
-    }
 
     fn fetch_inode(&self, inode_number: u16) -> Result<Inode, String> {
         let inode_offset = ffs::get_inode_offset(inode_number);
@@ -325,7 +307,7 @@ mod tests {
     fn test_fs() {
         const TEST_FS_SIZE: u32 = 10 * (1 << 20); // 10 MB
         const BLOCK_SIZE: u32 = 4 * (1 << 10); // 4 KB
-        const BYTES_PER_INODE: u32 = 1 << 8; // 256 bytes per inode
+        const BYTES_PER_INODE: u32 = 1 << 12; // 4096 bytes per inode
         let FILE_NAME = "test_fs.dat".to_string();
 
         let fs = ffs::new(

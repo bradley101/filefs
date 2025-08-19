@@ -1,7 +1,7 @@
 
 
 use core::num;
-use std::{fs::File, io::{Seek, SeekFrom, Write}};
+use std::{cmp::max, fs::File, io::{Seek, SeekFrom, Write}};
 
 use bitvec::prelude::*;
 use crate::inode::INODE_SIZE;
@@ -41,8 +41,8 @@ impl SuperBlock {
         let ti = (fs_size / bytes_per_inode) as u16 ;
         let tb = (fs_size / block_size) as u16;
         let inode_block_count = (ti as usize * INODE_SIZE) / block_size as usize;
-        let inode_bitmap_block_count = ti / 8 / block_size as u16;
-        let block_bitmap_block_count = tb / 8 / block_size as u16;
+        let inode_bitmap_block_count = max(1, ti / 8 / block_size as u16);
+        let block_bitmap_block_count = max(1, tb / 8 / block_size as u16);
 
         Self {
             version: super::util::get_latest_version(),
@@ -83,6 +83,11 @@ impl SuperBlock {
     #[inline(always)]
     pub fn get_inode_bitmap_block_count(&self) -> usize {
         self.inode_bitmap_block_count as usize
+    }
+
+    #[inline(always)]
+    pub fn get_inode_start_block(&self) -> usize {
+        self.inode_start_block as usize
     }
 
     fn serialize(&self) -> Block {
@@ -158,7 +163,7 @@ impl BlockBitmap {
         blocks
     }
 
-    fn serialize_to_vec(&self) -> Vec<u8> {
+    pub fn serialize_to_vec(&self) -> Vec<u8> {
         self.bitmap.as_raw_slice().to_vec()
     }
 }
