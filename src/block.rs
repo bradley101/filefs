@@ -1,7 +1,7 @@
 
 
 use core::num;
-use std::{cmp::max, fs::File, io::{Seek, SeekFrom, Write}};
+use std::{cmp::max, fs::File, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 
 use bitvec::prelude::*;
 use crate::inode::INODE_SIZE;
@@ -104,11 +104,35 @@ impl SuperBlock {
         buffer.push(self.block_bitmap_block_count);
         buffer.extend_from_slice(&self.inode_start_block.to_le_bytes());
         buffer.extend_from_slice(&self.total_inode_blocks.to_le_bytes());
+        buffer.resize(self.get_block_size(), 0);
 
         Block {
             block_number: 0, // Superblock is always at block number 0
             data: buffer,
         }
+    }
+
+    fn deserialize(file: &mut File, block_size: usize) -> Result<SuperBlock, std::io::Error> {
+        let mut block = Block::default();
+        block.data.resize(block_size, 0);
+
+        let tmp_res =
+            file.read_exact_at(block.data.as_mut_slice(), SUPER_BLOCK_FILE_OFFSET);
+        
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        SuperBlock::deserialize_block(block)
+    }
+
+    fn deserialize_block(block: Block, block_size: usize) -> Result<SuperBlock, ()> {
+        if block.data.len() != block_size {
+            return Err(())
+        }
+        let super_block = SuperBlock::default();
+
+        Ok(super_block)
     }
 }
 

@@ -76,8 +76,33 @@ impl ffs {
     {
         if new {
             return self.create_new(file_name, size, block_size, bytes_per_inode)
+        } else {
+
         }
         panic!("Unsupported operation: ffs::init called with new = false. This is not implemented yet.");
+    }
+
+    fn load_existing(&mut self, file_name: &String) -> Result<(), std::io::Error>
+    {
+        let ff = OpenOptions::new()
+                        .create(false)
+                        .read(true)
+                        .write(true)
+                        .open(file_name.clone());
+        
+        if ff.is_err() {
+            return Err(ff.err().unwrap());
+        }
+
+        self.underlying_file = Some(ff.unwrap());
+
+        if let Err(err) = self.load_super_block() {
+            return Err(err);
+        }
+
+        self.load_root_inode();
+
+        Ok(())
     }
 
     fn create_new
@@ -116,6 +141,12 @@ impl ffs {
     //     }
     // }
 
+    fn load_super_block(&mut self) -> Result<(), std::io::Error>
+    {
+        Ok(())
+    }
+
+
     fn create_new_super_block
         (&mut self, fs_size: u32, block_size: u32, bytes_per_inode: u32)
         -> Result<(), std::io::Error>
@@ -145,6 +176,17 @@ impl ffs {
         Ok(())
     }
 
+    fn fetch_super_block(&mut self) -> Result<SuperBlock, std::io::Error> {
+        let f = self.underlying_file.as_mut().unwrap();
+
+        let tmp_res = f.seek(SeekFrom::Start(SUPER_BLOCK_FILE_OFFSET));
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        
+    }
+
     fn persist_super_block(&mut self, super_block: &SuperBlock) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
         
@@ -164,6 +206,10 @@ impl ffs {
     fn persist_block_bitmap(&mut self, block_bitmap: &BlockBitmap) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
         block_bitmap.persist(f, &self.super_block)
+    }
+
+    fn load_root_inode(&mut self) -> Result<(), std::io::Error> {
+        Ok(())
     }
     
     fn create_root_inode(&mut self) -> Result<(), std::io::Error> {
