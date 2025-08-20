@@ -1,10 +1,11 @@
 
 
 use core::num;
-use std::{cmp::max, fs::File, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
+use std::{cmp::max, fs::File, io::{Seek, SeekFrom, Write, Read}, os::unix::fs::FileExt};
 
 use bitvec::prelude::*;
 use crate::inode::INODE_SIZE;
+use byteorder::{ReadBytesExt, LittleEndian}; // Ensure ReadBytesExt is in scope for read_u16
 
 use super::inode::InodeBitmap;
 
@@ -112,7 +113,7 @@ impl SuperBlock {
         }
     }
 
-    fn deserialize(file: &mut File, block_size: usize) -> Result<SuperBlock, std::io::Error> {
+    pub fn deserialize(file: &mut File, block_size: usize) -> Result<SuperBlock, std::io::Error> {
         let mut block = Block::default();
         block.data.resize(block_size, 0);
 
@@ -126,11 +127,22 @@ impl SuperBlock {
         SuperBlock::deserialize_block(block)
     }
 
-    fn deserialize_block(block: Block, block_size: usize) -> Result<SuperBlock, ()> {
-        if block.data.len() != block_size {
-            return Err(())
-        }
-        let super_block = SuperBlock::default();
+    fn deserialize_block(block: Block) -> Result<SuperBlock, std::io::Error> {
+        let mut super_block = SuperBlock::default();
+
+        let mut cursor = std::io::Cursor::new(block.data);
+        cursor.read_exact(super_block.version.as_mut_slice()).map_err(|e| e)?;
+        super_block.total_inodes = cursor.read_u16::<LittleEndian>().map_err(|e| e)?; // Use ReadBytesExt trait
+        super_block.total_inodes = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
+        super_block.total_blocks = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
+        super_block.free_inodes = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
+        super_block.free_blocks = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
+        super_block.inode_size_log = cursor.read_u8().map_err(|e| e)?;
+        super_block.block_size_log = cursor.read_u8().map_err(|e| e)?;
+        super_block.inode_bitmap_block_count = cursor.read_u8().map_err(|e| e)?;
+        super_block.block_bitmap_block_count = cursor.read_u8().map_err(|e| e)?;
+        super_block.inode_start_block = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
+        super_block.total_inode_blocks = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
 
         Ok(super_block)
     }

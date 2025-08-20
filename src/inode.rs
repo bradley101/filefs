@@ -130,6 +130,8 @@ impl InodeBitmap {
 
     }
 
+    // pub fn deserialize(file: &mut File, block_size: usize) 
+
     pub fn allocate_inode(&mut self, inode_num: u16) {
         self.bitmap.set(inode_num as usize, true);
     }
