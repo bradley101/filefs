@@ -42,8 +42,10 @@ pub struct Inode {
 impl Inode {
     pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let buffer = self.serialize();
-        file.write_all_at(buffer.as_slice(),
-            super_block_ref.get_inode_start_block() as u64 + (INODE_SIZE as u64 * self.inode_number as u64))
+        let inode_offset = 
+            super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
+            + (INODE_SIZE as u64 * self.inode_number as u64);
+        file.write_all_at(buffer.as_slice(), inode_offset)
     }
 
     fn serialize(&self) -> Vec<u8> {
@@ -88,16 +90,10 @@ impl InodeBitmap {
 
     pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let blocks = self.serialize(super_block_ref);
-        
-        let tmp_res = 
-            file.seek(SeekFrom::Start(blocks[0].block_number as u64 * super_block_ref.get_block_size() as u64));
-        
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
 
         for block in blocks {
-            let tmp_res = file.write_all(&block.data);
+            let block_offset = block.block_number as u64 * super_block_ref.get_block_size() as u64;
+            let tmp_res = file.write_all_at(block.data.as_slice(), block_offset);
             if tmp_res.is_err() {
                 return Err(tmp_res.err().unwrap());
             }
@@ -129,6 +125,8 @@ impl InodeBitmap {
         blocks
 
     }
+
+    // pub fn deserialize(file: &mut File, block_size: usize) 
 
     pub fn allocate_inode(&mut self, inode_num: u16) {
         self.bitmap.set(inode_num as usize, true);
