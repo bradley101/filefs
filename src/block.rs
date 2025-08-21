@@ -10,6 +10,7 @@ use byteorder::{ReadBytesExt, LittleEndian}; // Ensure ReadBytesExt is in scope 
 use super::inode::InodeBitmap;
 
 pub const SUPER_BLOCK_FILE_OFFSET: u64 = 0;
+pub const SUPER_BLOCK_SIZE: usize = 1 << 8;
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct SuperBlock {
@@ -61,9 +62,8 @@ impl SuperBlock {
     }
 
     pub fn persist(&self, file: &mut File) -> std::io::Result<()> {
-        // use serde to serialize and write this superblock in the file
         let buffer = self.serialize();
-        file.write_all(buffer.data.as_slice())
+        file.write_all_at(buffer.data.as_slice(), 0)
     }
 
     #[inline(always)]
@@ -105,7 +105,9 @@ impl SuperBlock {
         buffer.push(self.block_bitmap_block_count);
         buffer.extend_from_slice(&self.inode_start_block.to_le_bytes());
         buffer.extend_from_slice(&self.total_inode_blocks.to_le_bytes());
-        buffer.resize(self.get_block_size(), 0);
+        // buffer.resize(self.get_block_size(), 0);
+
+        println!("Super block write buffer is {:?}", &buffer);
 
         Block {
             block_number: 0, // Superblock is always at block number 0
@@ -113,9 +115,9 @@ impl SuperBlock {
         }
     }
 
-    pub fn deserialize(file: &mut File, block_size: usize) -> Result<SuperBlock, std::io::Error> {
+    pub fn deserialize(file: &mut File) -> Result<SuperBlock, std::io::Error> {
         let mut block = Block::default();
-        block.data.resize(block_size, 0);
+        block.data.resize(SUPER_BLOCK_SIZE, 0);
 
         let tmp_res =
             file.read_exact_at(block.data.as_mut_slice(), SUPER_BLOCK_FILE_OFFSET);
@@ -128,23 +130,22 @@ impl SuperBlock {
     }
 
     fn deserialize_block(block: Block) -> Result<SuperBlock, std::io::Error> {
-        let mut super_block = SuperBlock::default();
-
-        let mut cursor = std::io::Cursor::new(block.data);
-        cursor.read_exact(super_block.version.as_mut_slice()).map_err(|e| e)?;
-        super_block.total_inodes = cursor.read_u16::<LittleEndian>().map_err(|e| e)?; // Use ReadBytesExt trait
-        super_block.total_inodes = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
-        super_block.total_blocks = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
-        super_block.free_inodes = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
-        super_block.free_blocks = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
-        super_block.inode_size_log = cursor.read_u8().map_err(|e| e)?;
-        super_block.block_size_log = cursor.read_u8().map_err(|e| e)?;
-        super_block.inode_bitmap_block_count = cursor.read_u8().map_err(|e| e)?;
-        super_block.block_bitmap_block_count = cursor.read_u8().map_err(|e| e)?;
-        super_block.inode_start_block = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
-        super_block.total_inode_blocks = cursor.read_u16::<LittleEndian>().map_err(|e| e)?;
-
-        Ok(super_block)
+        let bytes = block.data.as_slice();
+        println!("Super block read buffer is {:?}", block.data);
+        
+        Ok(SuperBlock {
+            version: [bytes[0], bytes[1], bytes[2]],
+            total_inodes: u16::from_le_bytes([bytes[3], bytes[4]]),
+            total_blocks: u16::from_le_bytes([bytes[5], bytes[6]]),
+            free_inodes: u16::from_le_bytes([bytes[7], bytes[8]]),
+            free_blocks: u16::from_le_bytes([bytes[9], bytes[10]]),
+            inode_size_log: bytes[11],
+            block_size_log: bytes[12],
+            inode_bitmap_block_count: bytes[13],
+            block_bitmap_block_count: bytes[14],
+            inode_start_block: u16::from_le_bytes([bytes[15], bytes[16]]),
+            total_inode_blocks: u16::from_le_bytes([bytes[17], bytes[18]]),
+        })
     }
 }
 

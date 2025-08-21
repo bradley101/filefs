@@ -14,7 +14,7 @@ const BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT: usize = MAX_SUPPORTED_INODE_C
 
 use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 
-use crate::{block::{self, BlockBitmap, SuperBlock, SUPER_BLOCK_FILE_OFFSET}, inode::InodeBitmap};
+use crate::{block::{self, BlockBitmap, SuperBlock, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE}, inode::InodeBitmap};
 
 use super::inode::{ Inode, INODE_SIZE, MAX_CHILDREN_COUNT, MAX_FILE_NAME_SIZE, FileType };
 use bitvec::prelude::*;
@@ -127,6 +127,7 @@ impl ffs {
 
         // self.cwd = self.root_inode.clone();
 
+        self.underlying_file.as_mut().unwrap().flush()?;
         Ok(())
     }
 
@@ -174,29 +175,14 @@ impl ffs {
     fn fetch_super_block(&mut self) -> Result<SuperBlock, std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
 
-        let tmp_res = f.seek(SeekFrom::Start(SUPER_BLOCK_FILE_OFFSET));
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        SuperBlock::deserialize(f, self.super_block.get_block_size())
+        SuperBlock::deserialize(f)
     }
 
     fn persist_super_block(&mut self, super_block: &SuperBlock) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-        
-        let tmp_res = f.seek(SeekFrom::Start(SUPER_BLOCK_FILE_OFFSET));
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
 
         super_block.persist(f)
     }
-
-    // fn fetch_inode_bitmap(&mut self) -> Result<InodeBitmap, std::io::Error> {
-    //     let f = self.underlying_file.as_mut().unwrap();
-    //     InodeBitmap::deserialize(f, &self.super_block)
-    // }
 
     fn persist_inode_bitmap(&mut self, inode_bitmap: &InodeBitmap) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
