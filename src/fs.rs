@@ -23,6 +23,7 @@ struct ffs {
     super_block: SuperBlock,
     underlying_file: Option<File>,
     cwd: Inode,
+    root: Inode,
     inode_bitmap: InodeBitmap,
     block_bitmap: BlockBitmap,
 }
@@ -195,6 +196,14 @@ impl ffs {
     }
 
     fn load_root_inode(&mut self) -> Result<(), std::io::Error> {
+        let f = self.underlying_file.as_mut().unwrap();
+        
+        let tmp_res = Inode::load(f, 0, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        self.root = tmp_res.unwrap();
         Ok(())
     }
     
