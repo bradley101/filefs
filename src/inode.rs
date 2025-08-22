@@ -13,9 +13,10 @@ pub const USABLE_INODE_SIZE: usize = 2
 
 pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 2;
 
-use std::{io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
+use std::{io::{Cursor, Read, Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 
 use bitvec::prelude::*;
+use byteorder::{LittleEndian, ReadBytesExt};
 use crate::block::{Block, SuperBlock};
 
 use super::block::BlockBitmap;
@@ -71,6 +72,33 @@ impl Inode {
 
         buffer.resize(INODE_SIZE, 0); // Ensure the buffer is exactly INODE_SIZE
         buffer
+    }
+
+    pub fn load(file: &mut std::fs::File, inode_number: u16, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+        let inode_offset = 
+            super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
+            + (INODE_SIZE as u64 * inode_number as u64);
+        
+        let mut buffer = vec![0_u8; INODE_SIZE];
+        let tmp_res = file.read_exact_at(buffer.as_mut_slice(), inode_offset);
+
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        
+    }
+
+    fn deserialize(buffer: Vec<u8>) -> std::io::Result<Self> {
+        let mut cur = Cursor::new(buffer);
+        
+        let inode_number = cur.read_u16::<LittleEndian>()?;
+        let parent = cur.read_u16::<LittleEndian>()?;
+
+        let mut name_buffer = vec![0_u8; 64];
+        cur.read_exact(name_buffer.as_mut_slice())?;
+        let name = String::from_utf8(name_buffer).ok().unwrap();
+        
     }
 }
 

@@ -63,7 +63,7 @@ impl SuperBlock {
 
     pub fn persist(&self, file: &mut File) -> std::io::Result<()> {
         let buffer = self.serialize();
-        file.write_all_at(buffer.data.as_slice(), 0)
+        file.write_all_at(buffer.data.as_slice(), SUPER_BLOCK_FILE_OFFSET)
     }
 
     #[inline(always)]
