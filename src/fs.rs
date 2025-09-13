@@ -32,8 +32,9 @@ impl Default for ffs {
     fn default() -> Self {
         ffs {
             super_block: SuperBlock::default(),
-            cwd: Inode::default(),
             underlying_file: None,
+            cwd: Inode::default(),
+            root: Inode::default(),
             inode_bitmap: InodeBitmap::default(),
             block_bitmap: BlockBitmap::default(),
         }
@@ -124,9 +125,7 @@ impl ffs {
         }
 
         self.create_root_inode();
-        // self.init_free_inodes_list();
-
-        // self.cwd = self.root_inode.clone();
+        self.cwd = self.root.clone();
 
         self.underlying_file.as_mut().unwrap().flush()?;
         Ok(())
@@ -139,7 +138,6 @@ impl ffs {
             return Err(tmp_res.err().unwrap());
         }
         self.super_block = tmp_res.unwrap();
-
         Ok(())
     }
 
@@ -148,27 +146,38 @@ impl ffs {
         (&mut self, fs_size: u32, block_size: u32, bytes_per_inode: u32)
         -> Result<(), std::io::Error>
     {
-        let super_block = SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
-        let tmp_res = self.persist_super_block(&super_block);
+        self.super_block = SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
+        let tmp_res = self.persist_super_block();
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
-        self.super_block = super_block;
 
         // Create the Inode Bitmap
-        let inode_bitmap = InodeBitmap::new(self.super_block.get_total_inodes());
-        let tmp_res = self.persist_inode_bitmap(&inode_bitmap);
+        self.inode_bitmap = InodeBitmap::new(self.super_block.get_total_inodes());
+        let tmp_res = self.persist_inode_bitmap();
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
-        self.inode_bitmap = inode_bitmap;
         
-        let block_bitmap = BlockBitmap::new(self.super_block.get_total_blocks());
-        let tmp_res = self.persist_block_bitmap(&block_bitmap);
+        self.block_bitmap = BlockBitmap::new(self.super_block.get_total_blocks());
+        let tmp_res = self.persist_block_bitmap();
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
-        self.block_bitmap = block_bitmap;
+
+        // set the bitmap in the bitmap blocks for the above structures
+        self.block_bitmap.set(1);
+        (0..self.super_block.get_inode_bitmap_block_count())
+            .for_each(|b|
+                self.block_bitmap.set(b + 1));
+        (0..self.super_block.get_block_bitmap_block_count())
+            .for_each(|b|
+                self.block_bitmap.set(1 + self.super_block.get_inode_bitmap_block_count() + b));
+
+        let tmp_res = self.persist_block_bitmap();
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
 
         Ok(())
     }
@@ -179,20 +188,20 @@ impl ffs {
         SuperBlock::deserialize(f)
     }
 
-    fn persist_super_block(&mut self, super_block: &SuperBlock) -> Result<(), std::io::Error> {
+    fn persist_super_block(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
 
-        super_block.persist(f)
+        self.super_block.persist(f)
     }
 
-    fn persist_inode_bitmap(&mut self, inode_bitmap: &InodeBitmap) -> Result<(), std::io::Error> {
+    fn persist_inode_bitmap(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-        inode_bitmap.persist(f, &self.super_block)
+        self.inode_bitmap.persist(f, &self.super_block)
     }
 
-    fn persist_block_bitmap(&mut self, block_bitmap: &BlockBitmap) -> Result<(), std::io::Error> {
+    fn persist_block_bitmap(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-        block_bitmap.persist(f, &self.super_block)
+        self.block_bitmap.persist(f, &self.super_block)
     }
 
     fn load_root_inode(&mut self) -> Result<(), std::io::Error> {
@@ -209,17 +218,17 @@ impl ffs {
     
     fn create_root_inode(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-        let mut root_inode = Inode::default();
-        root_inode.name = String::from("/");
-        root_inode.inode_number = 0;
-        root_inode.file_type = FileType::Directory;
+        self.root = Inode::default();
+        self.root.name = String::from("/");
+        self.root.inode_number = 0;
+        self.root.file_type = FileType::Directory;
         
-        let tmp_res = root_inode.persist(f, &self.super_block);
+        let tmp_res = self.root.persist(f, &self.super_block);
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
 
-        self.inode_bitmap.allocate_inode(0);
+        self.inode_bitmap.set(0);
         self.inode_bitmap.persist(f, &self.super_block)
     }
 

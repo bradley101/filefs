@@ -91,6 +91,10 @@ impl SuperBlock {
         self.inode_start_block as usize
     }
 
+    pub fn get_block_bitmap_block_count(&self) -> usize {
+        self.block_bitmap_block_count as usize
+    }
+
     fn serialize(&self) -> Block {
         let mut buffer: Vec<u8> = Vec::new();
         // serialize all the fields of the superblock into buffer
@@ -202,5 +206,9 @@ impl BlockBitmap {
 
     pub fn serialize_to_vec(&self) -> Vec<u8> {
         self.bitmap.as_raw_slice().to_vec()
+    }
+
+    pub fn set(&mut self, block_number: usize) {
+        self.bitmap.set(block_number, true);
     }
 }
