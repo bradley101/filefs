@@ -15,7 +15,7 @@ pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 1;
 
 use std::{io::{Cursor, Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 
-use bitvec::prelude::*;
+use bitvec::{prelude::*, vec};
 use byteorder::{LittleEndian, ReadBytesExt};
 use crate::block::{Block, SuperBlock};
 
@@ -122,6 +122,48 @@ impl InodeBitmap {
         }
 
         Ok(())
+    }
+
+    /* 
+        First get the number of inode bitmap blocks from the super block,
+        then fetch that many blocks from the inode bitmap starting block offset,
+        then pass the vec to the deserialize function to generate a InodeBitmap
+    */
+    pub fn fetch(file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+        let total_inode_bitmap_blocks = super_block_ref.get_inode_bitmap_block_count();
+        let mut blocks: Vec<Block> = Vec::with_capacity(total_inode_bitmap_blocks);
+        let mut start = INODE_BITMAP_STARTING_BLOCK_NUMBER as u64 * super_block_ref.get_block_size() as u64;
+
+        for i in 0..total_inode_bitmap_blocks {
+            let block = Block::default();
+            let mut buffer = vec![0_u8; super_block_ref.get_block_size()];
+            let tmp_res = file.read_exact_at(buffer.as_mut_slice(), start);
+            if tmp_res.is_err() {
+                return Err(tmp_res.err().unwrap());
+            }
+            blocks.push(Block {
+                block_number: (i + INODE_BITMAP_STARTING_BLOCK_NUMBER) as u16,
+                data: buffer,
+            });
+            start += super_block_ref.get_block_size() as u64;
+        }
+        
+        Ok(Self::deserialize(blocks, super_block_ref))
+    }
+
+    fn deserialize(blocks: Vec<Block>, super_block_ref: &SuperBlock) -> Self {
+        let total_inodes = super_block_ref.get_total_inodes();
+        let mut bitmap = bitvec![u8, Lsb0; 0; total_inodes];
+        bitmap.fill(false);
+
+        let mut current_index = 0;
+        for block in blocks {
+            let data = block.data;
+            bitmap.as_raw_mut_slice()[current_index..current_index + data.len()]
+                .copy_from_slice(&data);
+        }
+
+        Self { bitmap }
     }
 
     fn serialize(&self, super_block_ref: &SuperBlock) -> Vec<Block> {

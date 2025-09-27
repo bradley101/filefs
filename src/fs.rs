@@ -124,9 +124,11 @@ impl ffs {
             return Err(err);
         }
 
-        self.create_root_inode();
-        self.cwd = self.root.clone();
+        if let Err(err) = self.create_root_inode() {
+            return Err(err);
+        }
 
+        self.cwd = self.root.clone();
         self.underlying_file.as_mut().unwrap().flush()?;
         Ok(())
     }
@@ -138,6 +140,9 @@ impl ffs {
             return Err(tmp_res.err().unwrap());
         }
         self.super_block = tmp_res.unwrap();
+
+
+
         Ok(())
     }
 
@@ -182,10 +187,29 @@ impl ffs {
         Ok(())
     }
 
-    fn fetch_super_block(&mut self) -> Result<SuperBlock, std::io::Error> {
+    fn fetch_super_block(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
 
-        SuperBlock::deserialize(f)
+        let tmp_res = SuperBlock::deserialize(f);
+        if tmp_res.is_err(){
+            return Err(tmp_res.err().unwrap());
+        }
+        self.super_block = tmp_res.unwrap();
+
+        // Fetch the inode bitmap
+        let tmp_res = InodeBitmap::deserialize(f, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+        self.inode_bitmap = tmp_res.unwrap();
+
+        // Fetch the block bitmap
+        let tmp_res = BlockBitmap::deserialize(f, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+        self.block_bitmap = tmp_res.unwrap();
+        Ok(())
     }
 
     fn persist_super_block(&mut self) -> Result<(), std::io::Error> {
