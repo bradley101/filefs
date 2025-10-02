@@ -11,11 +11,12 @@ pub const USABLE_INODE_SIZE: usize = 2
                                 + 2
                                 + (2 * MAX_CHILDREN_COUNT);
 
-pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 2;
+pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 1;
 
-use std::{io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
+use std::{io::{Cursor, Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 
-use bitvec::prelude::*;
+use bitvec::{prelude::*, vec};
+use byteorder::{LittleEndian, ReadBytesExt};
 use crate::block::{Block, SuperBlock};
 
 use super::block::BlockBitmap;
@@ -72,6 +73,27 @@ impl Inode {
         buffer.resize(INODE_SIZE, 0); // Ensure the buffer is exactly INODE_SIZE
         buffer
     }
+
+    // fn deserialize(buffer: Vec<u8>) -> 
+
+    pub fn load(file: &mut std::fs::File, inode_number: u16, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+        let inode_offset = 
+            super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
+            + (INODE_SIZE as u64 * inode_number as u64);
+        
+        let mut buffer = vec![0_u8; INODE_SIZE];
+        let tmp_res = file.read_exact_at(&mut buffer, inode_offset);
+
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        let mut cursor = Cursor::new(buffer);
+        let inode_number =  cursor.read_u16::<LittleEndian>()?; // Read inode number
+        // let inode_number = cursor.read_u16::<LittleEndian>();
+
+        Ok(Inode::default())
+    }
 }
 
 #[derive(Clone, Default)]
@@ -102,6 +124,57 @@ impl InodeBitmap {
         Ok(())
     }
 
+    /* 
+        First get the number of inode bitmap blocks from the super block,
+        then fetch that many blocks from the inode bitmap starting block offset,
+        then pass the vec to the deserialize function to generate a InodeBitmap
+    */
+    pub fn fetch(file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+        let total_inode_bitmap_blocks = super_block_ref.get_inode_bitmap_block_count();
+        let mut blocks: Vec<Block> = Vec::with_capacity(total_inode_bitmap_blocks);
+        let mut start = INODE_BITMAP_STARTING_BLOCK_NUMBER as u64 * super_block_ref.get_block_size() as u64;
+
+        for i in 0..total_inode_bitmap_blocks {
+            let block = Block::default();
+            let mut buffer = vec![0_u8; super_block_ref.get_block_size()];
+            let tmp_res = file.read_exact_at(buffer.as_mut_slice(), start);
+            if tmp_res.is_err() {
+                return Err(tmp_res.err().unwrap());
+            }
+            blocks.push(Block {
+                block_number: (i + INODE_BITMAP_STARTING_BLOCK_NUMBER) as u16,
+                data: buffer,
+            });
+            start += super_block_ref.get_block_size() as u64;
+        }
+        
+        Ok(Self::deserialize(blocks, super_block_ref))
+    }
+
+    fn deserialize(blocks: Vec<Block>, super_block_ref: &SuperBlock) -> Self {
+        let total_inodes = super_block_ref.get_total_inodes();
+        let mut bitmap = bitvec![u8, Lsb0; 0; total_inodes];
+        bitmap.fill(false);
+
+        let mut current_index = 0;
+        for block in blocks[..blocks.len() - 1].iter() {
+            let data = &block.data;
+            bitmap.as_raw_mut_slice()[current_index..current_index + (data.len() >> 3)]
+                .copy_from_slice(&data);
+            current_index += data.len();
+        }
+        {
+            // Handle the last block separately to avoid overrun
+            let last_block = &blocks[blocks.len() - 1];
+            let data = &last_block.data;
+            let remaining_bits = total_inodes - current_index * 8;
+            let bytes_to_copy = (remaining_bits + 7) / 8; // Round up to the nearest byte
+            bitmap.as_raw_mut_slice()[current_index..current_index + bytes_to_copy]
+                .copy_from_slice(&data[..bytes_to_copy]);
+        }
+        Self { bitmap }
+    }
+
     fn serialize(&self, super_block_ref: &SuperBlock) -> Vec<Block> {
         let mut blocks: Vec<Block> = Vec::new();
         let total_inode_bitmap_blocks = super_block_ref.get_inode_bitmap_block_count();
@@ -120,16 +193,14 @@ impl InodeBitmap {
                 data: data.to_vec(),
             });
         }
-        
 
         blocks
-
     }
 
     // pub fn deserialize(file: &mut File, block_size: usize) 
 
-    pub fn allocate_inode(&mut self, inode_num: u16) {
-        self.bitmap.set(inode_num as usize, true);
+    pub fn set(&mut self, inode_num: usize) {
+        self.bitmap.set(inode_num, true);
     }
 }
 

@@ -1,28 +1,13 @@
 
-
-
-
-const FS_DESCRIPTOR_SIZE: usize = 128;
-const FS_USED_SIZE: usize = 2
-                            + BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT
-                            + 3;
-
-const INODE_STARTING_POS: usize = FS_DESCRIPTOR_SIZE;
-
-const MAX_SUPPORTED_INODE_COUNT: u16 = 512;
-const BYTES_REQUIRED_TO_REPRESENT_MAX_INODE_COUNT: usize = MAX_SUPPORTED_INODE_COUNT as usize / 8;
-
-use std::{fs::{ File, OpenOptions }, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
-
-use crate::{block::{self, BlockBitmap, SuperBlock, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE}, inode::InodeBitmap};
-
-use super::inode::{ Inode, INODE_SIZE, MAX_CHILDREN_COUNT, MAX_FILE_NAME_SIZE, FileType };
-use bitvec::prelude::*;
+use std::{fs::{ File, OpenOptions }, io::Write};
+use crate::{block::{BlockBitmap, SuperBlock}, inode::InodeBitmap};
+use super::inode::{ Inode, FileType };
 
 struct ffs {
     super_block: SuperBlock,
     underlying_file: Option<File>,
     cwd: Inode,
+    root: Inode,
     inode_bitmap: InodeBitmap,
     block_bitmap: BlockBitmap,
 }
@@ -31,8 +16,9 @@ impl Default for ffs {
     fn default() -> Self {
         ffs {
             super_block: SuperBlock::default(),
-            cwd: Inode::default(),
             underlying_file: None,
+            cwd: Inode::default(),
+            root: Inode::default(),
             inode_bitmap: InodeBitmap::default(),
             block_bitmap: BlockBitmap::default(),
         }
@@ -77,7 +63,6 @@ impl ffs {
         } else {
             return self.load_existing(file_name);
         }
-        // panic!("Unsupported operation: ffs::init called with new = false. This is not implemented yet.");
     }
 
     fn load_existing(&mut self, file_name: &String) -> Result<(), std::io::Error>
@@ -94,11 +79,13 @@ impl ffs {
 
         self.underlying_file = Some(ff.unwrap());
 
-        if let Err(err) = self.load_super_block() {
+        if let Err(err) = self.fetch_super_block() {
             return Err(err);
         }
 
-        self.load_root_inode();
+        if let Err(err) = self.load_root_inode() {
+            return Err(err);
+        }
 
         Ok(())
     }
@@ -122,95 +109,120 @@ impl ffs {
             return Err(err);
         }
 
-        self.create_root_inode();
-        // self.init_free_inodes_list();
+        if let Err(err) = self.create_root_inode() {
+            return Err(err);
+        }
 
-        // self.cwd = self.root_inode.clone();
-
+        self.cwd = self.root.clone();
         self.underlying_file.as_mut().unwrap().flush()?;
         Ok(())
     }
-
-    fn load_super_block(&mut self) -> Result<(), std::io::Error>
-    {
-        let tmp_res = self.fetch_super_block();
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-        self.super_block = tmp_res.unwrap();
-
-        Ok(())
-    }
-
 
     fn create_new_super_block
         (&mut self, fs_size: u32, block_size: u32, bytes_per_inode: u32)
         -> Result<(), std::io::Error>
     {
-        let super_block = SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
-        let tmp_res = self.persist_super_block(&super_block);
+        self.super_block = SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
+        let tmp_res = self.persist_super_block();
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
-        self.super_block = super_block;
 
         // Create the Inode Bitmap
-        let inode_bitmap = InodeBitmap::new(self.super_block.get_total_inodes());
-        let tmp_res = self.persist_inode_bitmap(&inode_bitmap);
+        self.inode_bitmap = InodeBitmap::new(self.super_block.get_total_inodes());
+        let tmp_res = self.persist_inode_bitmap();
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
-        self.inode_bitmap = inode_bitmap;
         
-        let block_bitmap = BlockBitmap::new(self.super_block.get_total_blocks());
-        let tmp_res = self.persist_block_bitmap(&block_bitmap);
+        self.block_bitmap = BlockBitmap::new(self.super_block.get_total_blocks());
+        let tmp_res = self.persist_block_bitmap();
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
-        self.block_bitmap = block_bitmap;
+
+        // set the bitmap in the bitmap blocks for the above structures
+        self.block_bitmap.set(1);
+        (0..self.super_block.get_inode_bitmap_block_count())
+            .for_each(|b|
+                self.block_bitmap.set(b + 1));
+        (0..self.super_block.get_block_bitmap_block_count())
+            .for_each(|b|
+                self.block_bitmap.set(1 + self.super_block.get_inode_bitmap_block_count() + b));
+
+        let tmp_res = self.persist_block_bitmap();
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
 
         Ok(())
     }
 
-    fn fetch_super_block(&mut self) -> Result<SuperBlock, std::io::Error> {
+    fn fetch_super_block(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
 
-        SuperBlock::deserialize(f)
+        let tmp_res = SuperBlock::deserialize(f);
+        if tmp_res.is_err(){
+            return Err(tmp_res.err().unwrap());
+        }
+        self.super_block = tmp_res.unwrap();
+
+        // Fetch the inode bitmap
+        let tmp_res = InodeBitmap::fetch(f, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+        self.inode_bitmap = tmp_res.unwrap();
+
+        // Fetch the block bitmap
+        let tmp_res = BlockBitmap::fetch(f, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+        self.block_bitmap = tmp_res.unwrap();
+        Ok(())
     }
 
-    fn persist_super_block(&mut self, super_block: &SuperBlock) -> Result<(), std::io::Error> {
+    fn persist_super_block(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-
-        super_block.persist(f)
+        self.super_block.persist(f)
     }
 
-    fn persist_inode_bitmap(&mut self, inode_bitmap: &InodeBitmap) -> Result<(), std::io::Error> {
+    fn persist_inode_bitmap(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-        inode_bitmap.persist(f, &self.super_block)
+        self.inode_bitmap.persist(f, &self.super_block)
     }
 
-    fn persist_block_bitmap(&mut self, block_bitmap: &BlockBitmap) -> Result<(), std::io::Error> {
+    fn persist_block_bitmap(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-        block_bitmap.persist(f, &self.super_block)
+        self.block_bitmap.persist(f, &self.super_block)
     }
 
     fn load_root_inode(&mut self) -> Result<(), std::io::Error> {
+        let f = self.underlying_file.as_mut().unwrap();
+        
+        let tmp_res = Inode::load(f, 0, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        self.root = tmp_res.unwrap();
         Ok(())
     }
     
     fn create_root_inode(&mut self) -> Result<(), std::io::Error> {
         let f = self.underlying_file.as_mut().unwrap();
-        let mut root_inode = Inode::default();
-        root_inode.name = String::from("/");
-        root_inode.inode_number = 0;
-        root_inode.file_type = FileType::Directory;
+        self.root = Inode::default();
+        self.root.name = String::from("/");
+        self.root.inode_number = 0;
+        self.root.file_type = FileType::Directory;
         
-        let tmp_res = root_inode.persist(f, &self.super_block);
+        let tmp_res = self.root.persist(f, &self.super_block);
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
 
-        self.inode_bitmap.allocate_inode(0);
+        self.inode_bitmap.set(0);
         self.inode_bitmap.persist(f, &self.super_block)
     }
 
@@ -219,34 +231,27 @@ impl ffs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::remove_file;
 
     #[test]
     fn test_new_fs() {
         const TEST_FS_SIZE: u32 = 10 * (1 << 20); // 10 MB
         const BLOCK_SIZE: u32 = 4 * (1 << 10); // 4 KB
         const BYTES_PER_INODE: u32 = 1 << 12; // 4096 bytes per inode
-        let FILE_NAME = "test_fs.dat".to_string();
+        let file_name = "test_fs.dat".to_string();
 
         let fs = ffs::new(
-            FILE_NAME,
+            file_name,
             TEST_FS_SIZE,
             BLOCK_SIZE,
             BYTES_PER_INODE,
         );
         assert!(fs.is_some());
-        let fs = fs.unwrap();
     }
 
     #[test]
     fn test_existing_fs() {
-        let FILE_NAME = "test_fs.dat".to_string();
-
-        let fs = ffs::load(FILE_NAME);
+        let file_name = "test_fs.dat".to_string();
+        let fs = ffs::load(file_name);
         assert!(fs.is_some());
-        let fs = fs.unwrap();
     }
 }
-
-
-     
