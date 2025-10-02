@@ -157,12 +157,21 @@ impl InodeBitmap {
         bitmap.fill(false);
 
         let mut current_index = 0;
-        for block in blocks {
-            let data = block.data;
-            bitmap.as_raw_mut_slice()[current_index..current_index + data.len()]
+        for block in blocks[..blocks.len() - 1].iter() {
+            let data = &block.data;
+            bitmap.as_raw_mut_slice()[current_index..current_index + (data.len() >> 3)]
                 .copy_from_slice(&data);
+            current_index += data.len();
         }
-
+        {
+            // Handle the last block separately to avoid overrun
+            let last_block = &blocks[blocks.len() - 1];
+            let data = &last_block.data;
+            let remaining_bits = total_inodes - current_index * 8;
+            let bytes_to_copy = (remaining_bits + 7) / 8; // Round up to the nearest byte
+            bitmap.as_raw_mut_slice()[current_index..current_index + bytes_to_copy]
+                .copy_from_slice(&data[..bytes_to_copy]);
+        }
         Self { bitmap }
     }
 
@@ -184,10 +193,8 @@ impl InodeBitmap {
                 data: data.to_vec(),
             });
         }
-        
 
         blocks
-
     }
 
     // pub fn deserialize(file: &mut File, block_size: usize) 

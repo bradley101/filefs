@@ -1,13 +1,11 @@
 
 
-use core::num;
-use std::{cmp::max, fs::File, io::{Seek, SeekFrom, Write, Read}, os::unix::fs::FileExt};
+use std::{cmp::max, fs::File, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 
 use bitvec::prelude::*;
 use crate::inode::INODE_SIZE;
-use byteorder::{ReadBytesExt, LittleEndian}; // Ensure ReadBytesExt is in scope for read_u16
 
-use super::inode::InodeBitmap;
+use super::inode::INODE_BITMAP_STARTING_BLOCK_NUMBER;
 
 pub const SUPER_BLOCK_FILE_OFFSET: u64 = 0;
 pub const SUPER_BLOCK_SIZE: usize = 1 << 8;
@@ -111,8 +109,6 @@ impl SuperBlock {
         buffer.extend_from_slice(&self.total_inode_blocks.to_le_bytes());
         // buffer.resize(self.get_block_size(), 0);
 
-        println!("Super block write buffer is {:?}", &buffer);
-
         Block {
             block_number: 0, // Superblock is always at block number 0
             data: buffer,
@@ -135,7 +131,6 @@ impl SuperBlock {
 
     fn deserialize_block(block: Block) -> Result<SuperBlock, std::io::Error> {
         let bytes = block.data.as_slice();
-        println!("Super block read buffer is {:?}", block.data);
         
         Ok(SuperBlock {
             version: [bytes[0], bytes[1], bytes[2]],
@@ -180,6 +175,53 @@ impl BlockBitmap {
         }
 
         Ok(())
+    }
+
+    pub fn fetch(file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+        let total_block_bitmap_blocks = super_block_ref.get_block_bitmap_block_count();
+        let mut blocks: Vec<Block> = Vec::with_capacity(total_block_bitmap_blocks);
+        let mut start = ((1 + super_block_ref.get_inode_bitmap_block_count()) * super_block_ref.get_block_size()) as u64;
+
+        for i in 0..total_block_bitmap_blocks {
+            let block = Block::default();
+            let mut buffer = vec![0_u8; super_block_ref.get_block_size()];
+            let tmp_res = file.read_exact_at(buffer.as_mut_slice(), start);
+            if tmp_res.is_err() {
+                return Err(tmp_res.err().unwrap());
+            }
+            blocks.push(Block {
+                block_number: (INODE_BITMAP_STARTING_BLOCK_NUMBER + super_block_ref.get_inode_bitmap_block_count() + i) as u16,
+                data: buffer,
+            });
+            start += super_block_ref.get_block_size() as u64;
+        }
+        
+        Ok(Self::deserialize(blocks, super_block_ref))
+    }
+
+    fn deserialize(blocks: Vec<Block>, super_block_ref: &SuperBlock) -> Self {
+        let total_blocks = super_block_ref.get_total_blocks();
+        let mut bitmap = bitvec![u8, Lsb0; 0; total_blocks];
+        bitmap.fill(false);
+
+        let mut current_index = 0;
+        for block in blocks[..blocks.len() - 1].iter() {
+            let data = &block.data;
+            let len = data.len();
+            bitmap.as_raw_mut_slice()[current_index..current_index + (len >> 3)]
+                .copy_from_slice(&data);
+            current_index += len;
+        }
+        {
+            // Handle the last block separately to avoid overrun
+            let last_block = &blocks[blocks.len() - 1];
+            let data = &last_block.data;
+            let remaining_bits = total_blocks - current_index * 8;
+            let bytes_to_copy = (remaining_bits + 7) / 8; // Round up to the nearest byte
+            bitmap.as_raw_mut_slice()[current_index..current_index + bytes_to_copy]
+                .copy_from_slice(&data[..bytes_to_copy]);
+        }
+        Self { bitmap }
     }
 
     fn serialize(&self, super_block_ref: &SuperBlock) -> Vec<Block> {
