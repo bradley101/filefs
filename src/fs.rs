@@ -1,5 +1,5 @@
 
-use std::{fs::{ File, OpenOptions }, io::Write};
+use std::{fs::{ File, OpenOptions }};
 use crate::{block::{BlockBitmap, SuperBlock}, inode::InodeBitmap};
 use super::inode::{ Inode, FileType };
 
@@ -87,6 +87,7 @@ impl ffs {
             return Err(err);
         }
 
+        self.cwd = self.root.clone();
         Ok(())
     }
 
@@ -114,7 +115,6 @@ impl ffs {
         }
 
         self.cwd = self.root.clone();
-        self.underlying_file.as_mut().unwrap().flush()?;
         Ok(())
     }
 
@@ -225,6 +225,8 @@ impl ffs {
         self.inode_bitmap.set(0);
         self.inode_bitmap.persist(f, &self.super_block)
     }
+
+    // fn create_new_file(&mut self, )
 
 }
 

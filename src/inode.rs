@@ -200,7 +200,21 @@ impl InodeBitmap {
     // pub fn deserialize(file: &mut File, block_size: usize) 
 
     pub fn set(&mut self, inode_num: usize) {
+        assert!(inode_num < self.bitmap.len());
         self.bitmap.set(inode_num, true);
+    }
+
+    pub fn get(&self, inode_num: usize) -> bool {
+        assert!(inode_num < self.bitmap.len());
+        *self.bitmap.get(inode_num).unwrap()
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.bitmap.all()
+    }
+
+    pub fn find_first_free(&self) -> Option<usize> {
+        self.bitmap.first_zero()
     }
 }
 
