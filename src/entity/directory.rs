@@ -5,6 +5,13 @@
 
 use crate::core::inode::Inode;
 
-struct Directory {
+#[derive(Debug, Clone, Default)]
+pub struct Directory {
     inode: Inode,
+}
+
+impl Directory {
+    pub fn new(inode: Inode) -> Self {
+        Self { inode  }
+    }
 }

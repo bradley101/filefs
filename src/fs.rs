@@ -1,7 +1,9 @@
 
 use std::fs::{ File, OpenOptions };
-use crate::core::block::{ BlockBitmap, SuperBlock };
-use crate::core::inode::{ Inode, InodeBitmap, FileType };
+use crate::core::block_bitmap::BlockBitmap;
+use crate::core::super_block::SuperBlock;
+use crate::core::inode::{ Inode, FileType };
+use crate::core::inode_bitmap::InodeBitmap;
 
 struct ffs {
     super_block: SuperBlock,
@@ -239,12 +241,13 @@ impl ffs {
         let new_inode = new_inode.unwrap();
         let f = self.underlying_file.as_mut().unwrap();
 
+        // TODO - make this whole operation atomic
         let tmp_res = new_inode.persist(f, &self.super_block);
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
 
-        self.inode_bitmap.set(new_inode_number);
+        self.inode_bitmap.set(new_inode.inode_number as usize);
         let tmp_res = self.persist_inode_bitmap();
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
