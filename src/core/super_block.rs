@@ -1,8 +1,12 @@
 use std::{cmp::max, fs::File, os::unix::fs::FileExt};
 
-use super::{block::{Block, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE}, block_data_types::BlockDataType, inode::INODE_SIZE};
+use super::{block::Block, block_data_types::BlockDataType};
 
-
+use crate::util::{
+    SUPER_BLOCK_FILE_OFFSET,
+    SUPER_BLOCK_SIZE,
+    INODE_SIZE
+};
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct SuperBlock {

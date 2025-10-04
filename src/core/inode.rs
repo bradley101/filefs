@@ -1,20 +1,8 @@
 
-pub const MAX_FILE_NAME_SIZE: usize = 64;
-pub const MAX_CHILDREN_COUNT: usize = 64;
-
-pub const INODE_SIZE: usize = 256;
-pub const USABLE_INODE_SIZE: usize = 2 
-                                + 2
-                                + MAX_FILE_NAME_SIZE 
-                                + 2
-                                + 1
-                                + 2
-                                + (2 * MAX_CHILDREN_COUNT);
-
-pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 1;
-
 use std::{io::Cursor, os::unix::fs::FileExt};
 use byteorder::{LittleEndian, ReadBytesExt};
+
+use crate::util::INODE_SIZE;
 
 use super::block_bitmap::BlockBitmap;
 use super::inode_bitmap::InodeBitmap;
@@ -47,7 +35,7 @@ impl Inode {
          super_block_ref: &SuperBlock,
          inode_bitmap_ref: &InodeBitmap) -> Result<Self, std::io::Error>
     {
-        if name.len() > MAX_FILE_NAME_SIZE {
+        if name.len() > crate::util::MAX_FILE_NAME_SIZE {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "File name too long"));
         }
 
@@ -83,8 +71,8 @@ impl Inode {
         buffer.extend_from_slice(&self.parent.to_le_bytes());
 
         let name_bytes = self.name.as_bytes();
-        let mut name_buffer = vec![0_u8; MAX_FILE_NAME_SIZE];
-        name_buffer[..name_bytes.len().min(MAX_FILE_NAME_SIZE)].copy_from_slice(&name_bytes[..name_bytes.len().min(MAX_FILE_NAME_SIZE)]);
+        let mut name_buffer = vec![0_u8; crate::util::MAX_FILE_NAME_SIZE];
+        name_buffer[..name_bytes.len().min(crate::util::MAX_FILE_NAME_SIZE)].copy_from_slice(&name_bytes[..name_bytes.len().min(crate::util::MAX_FILE_NAME_SIZE)]);
         buffer.extend_from_slice(&name_buffer);
 
         for &block in &self.data_blocks {

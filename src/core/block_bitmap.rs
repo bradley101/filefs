@@ -3,7 +3,8 @@ use std::{io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 
 use bitvec::prelude::*;
 
-use super::{block::Block, block_data_types::BlockDataType, inode::INODE_BITMAP_STARTING_BLOCK_NUMBER, super_block::SuperBlock};
+use super::{block::Block, block_data_types::BlockDataType, super_block::SuperBlock};
+use crate::util::INODE_BITMAP_STARTING_BLOCK_NUMBER;
 
 #[derive(Debug, Clone, Default)]
 pub struct BlockBitmap {
