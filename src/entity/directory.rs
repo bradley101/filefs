@@ -3,6 +3,8 @@
     it contains, the corresponding Inode, and helper functions
 */
 
+use crate::core::inode::Inode;
+
 struct Directory {
-    inode: inode::Inode,
+    inode: Inode,
 }

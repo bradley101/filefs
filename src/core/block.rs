@@ -1,11 +1,9 @@
 
 
 use std::{cmp::max, fs::File, io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
-
 use bitvec::prelude::*;
-use crate::inode::INODE_SIZE;
 
-use super::inode::INODE_BITMAP_STARTING_BLOCK_NUMBER;
+use super::inode::{INODE_SIZE, INODE_BITMAP_STARTING_BLOCK_NUMBER};
 
 pub const SUPER_BLOCK_FILE_OFFSET: u64 = 0;
 pub const SUPER_BLOCK_SIZE: usize = 1 << 8;
@@ -45,7 +43,7 @@ impl SuperBlock {
         let block_bitmap_block_count = max(1, tb / 8 / block_size as u16);
 
         Self {
-            version: super::util::get_latest_version(),
+            version: crate::util::get_latest_version(),
             total_inodes: ti,
             total_blocks: tb,
             free_inodes: ti,

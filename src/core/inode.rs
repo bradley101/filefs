@@ -13,13 +13,11 @@ pub const USABLE_INODE_SIZE: usize = 2
 
 pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 1;
 
-use std::{io::{Cursor, Seek, SeekFrom, Write}, os::unix::fs::FileExt};
-
-use bitvec::{prelude::*, vec};
+use std::{io::Cursor, os::unix::fs::FileExt};
+use bitvec::prelude::*;
 use byteorder::{LittleEndian, ReadBytesExt};
-use crate::block::{Block, SuperBlock};
 
-use super::block::BlockBitmap;
+use super::block::{Block, SuperBlock, BlockBitmap};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
@@ -41,6 +39,34 @@ pub struct Inode {
 }
 
 impl Inode {
+    pub fn create_new
+        (parent: &Inode,
+         name: &String,
+         file_type: FileType,
+         super_block_ref: &SuperBlock,
+         inode_bitmap_ref: &InodeBitmap) -> Result<Self, std::io::Error>
+    {
+        if name.len() > MAX_FILE_NAME_SIZE {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "File name too long"));
+        }
+
+        if inode_bitmap_ref.is_full() {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "No free inodes available"));
+        }
+
+        let inode_number = inode_bitmap_ref.find_first_free().expect("No free inodes available") as u16;
+        let new_inode = Self {
+            inode_number,
+            parent: parent.inode_number,
+            name: name.clone(),
+            data_blocks: [0_u16; 32],
+            block_bitmap: BlockBitmap::new(super_block_ref.get_total_blocks() as usize),
+            file_type,
+            file_size: 0,
+        };
+
+        Ok(new_inode)
+    }
     pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let buffer = self.serialize();
         let inode_offset = 
