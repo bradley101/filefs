@@ -1,7 +1,9 @@
 
-use std::{fs::{ File, OpenOptions }, io::Write};
-use crate::{block::{BlockBitmap, SuperBlock}, inode::InodeBitmap};
-use super::inode::{ Inode, FileType };
+use std::fs::{ File, OpenOptions };
+use crate::core::block_bitmap::BlockBitmap;
+use crate::core::super_block::SuperBlock;
+use crate::core::inode::{ Inode, FileType };
+use crate::core::inode_bitmap::InodeBitmap;
 
 struct ffs {
     super_block: SuperBlock,
@@ -87,6 +89,7 @@ impl ffs {
             return Err(err);
         }
 
+        self.cwd = self.root.clone();
         Ok(())
     }
 
@@ -114,7 +117,6 @@ impl ffs {
         }
 
         self.cwd = self.root.clone();
-        self.underlying_file.as_mut().unwrap().flush()?;
         Ok(())
     }
 
@@ -224,6 +226,34 @@ impl ffs {
 
         self.inode_bitmap.set(0);
         self.inode_bitmap.persist(f, &self.super_block)
+    }
+
+    fn create_new_file(&mut self, file_name: &String, file_type: FileType) -> Result<(), std::io::Error> {
+        let new_inode = Inode::create_new(&self.cwd,
+                                                                file_name,
+                                                                FileType::File,
+                                                                &self.super_block,
+                                                                &self.inode_bitmap);
+        if new_inode.is_err() {
+            return Err(new_inode.err().unwrap());
+        }
+
+        let new_inode = new_inode.unwrap();
+        let f = self.underlying_file.as_mut().unwrap();
+
+        // TODO - make this whole operation atomic
+        let tmp_res = new_inode.persist(f, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        self.inode_bitmap.set(new_inode.inode_number as usize);
+        let tmp_res = self.persist_inode_bitmap();
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        Ok(())
     }
 
 }

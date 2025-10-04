@@ -1,5 +1,7 @@
 
 mod fs;
-mod inode;
-mod block;
+
+mod core;
+mod entity;
+
 mod util;

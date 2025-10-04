@@ -1,100 +1,10 @@
 
-pub const MAX_FILE_NAME_SIZE: usize = 64;
-pub const MAX_CHILDREN_COUNT: usize = 64;
+use std::os::unix::fs::FileExt;
 
-pub const INODE_SIZE: usize = 256;
-pub const USABLE_INODE_SIZE: usize = 2 
-                                + 2
-                                + MAX_FILE_NAME_SIZE 
-                                + 2
-                                + 1
-                                + 2
-                                + (2 * MAX_CHILDREN_COUNT);
+use bitvec::prelude::*;
 
-pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 1;
-
-use std::{io::{Cursor, Seek, SeekFrom, Write}, os::unix::fs::FileExt};
-
-use bitvec::{prelude::*, vec};
-use byteorder::{LittleEndian, ReadBytesExt};
-use crate::block::{Block, SuperBlock};
-
-use super::block::BlockBitmap;
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
-pub enum FileType {
-    #[default]
-    File = 0_u8,
-    Directory = 1
-}
-
-#[derive(Clone, Default)]
-pub struct Inode {
-    pub inode_number: u16,
-    pub parent: u16,
-    pub name: String,
-    pub data_blocks: [u16; 32],
-    pub block_bitmap: BlockBitmap,
-    pub file_type: FileType,
-    pub file_size: u32,
-}
-
-impl Inode {
-    pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
-        let buffer = self.serialize();
-        let inode_offset = 
-            super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
-            + (INODE_SIZE as u64 * self.inode_number as u64);
-        file.write_all_at(buffer.as_slice(), inode_offset)
-    }
-
-    fn serialize(&self) -> Vec<u8> {
-        let mut buffer: Vec<u8> = Vec::with_capacity(INODE_SIZE);
-
-        buffer.extend_from_slice(&self.inode_number.to_le_bytes());
-        buffer.extend_from_slice(&self.parent.to_le_bytes());
-
-        let name_bytes = self.name.as_bytes();
-        let mut name_buffer = vec![0_u8; MAX_FILE_NAME_SIZE];
-        name_buffer[..name_bytes.len().min(MAX_FILE_NAME_SIZE)].copy_from_slice(&name_bytes[..name_bytes.len().min(MAX_FILE_NAME_SIZE)]);
-        buffer.extend_from_slice(&name_buffer);
-
-        for &block in &self.data_blocks {
-            buffer.extend_from_slice(&block.to_le_bytes());
-        }
-
-        buffer.extend_from_slice(self.block_bitmap.serialize_to_vec().as_slice());
-
-        buffer.push(self.file_type as u8);
-        buffer.extend_from_slice(&self.file_size.to_le_bytes());
-
-
-        buffer.resize(INODE_SIZE, 0); // Ensure the buffer is exactly INODE_SIZE
-        buffer
-    }
-
-    // fn deserialize(buffer: Vec<u8>) -> 
-
-    pub fn load(file: &mut std::fs::File, inode_number: u16, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
-        let inode_offset = 
-            super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
-            + (INODE_SIZE as u64 * inode_number as u64);
-        
-        let mut buffer = vec![0_u8; INODE_SIZE];
-        let tmp_res = file.read_exact_at(&mut buffer, inode_offset);
-
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        let mut cursor = Cursor::new(buffer);
-        let inode_number =  cursor.read_u16::<LittleEndian>()?; // Read inode number
-        // let inode_number = cursor.read_u16::<LittleEndian>();
-
-        Ok(Inode::default())
-    }
-}
+use super::{block::Block, block_data_types::BlockDataType, super_block::SuperBlock};
+use crate::util::INODE_BITMAP_STARTING_BLOCK_NUMBER;
 
 #[derive(Clone, Default)]
 pub struct InodeBitmap {
@@ -144,6 +54,7 @@ impl InodeBitmap {
             blocks.push(Block {
                 block_number: (i + INODE_BITMAP_STARTING_BLOCK_NUMBER) as u16,
                 data: buffer,
+                block_type: BlockDataType::InodeBitmap,
             });
             start += super_block_ref.get_block_size() as u64;
         }
@@ -191,6 +102,7 @@ impl InodeBitmap {
             blocks.push(Block {
                 block_number: (i + INODE_BITMAP_STARTING_BLOCK_NUMBER) as u16,
                 data: data.to_vec(),
+                block_type: BlockDataType::InodeBitmap,
             });
         }
 
@@ -200,8 +112,20 @@ impl InodeBitmap {
     // pub fn deserialize(file: &mut File, block_size: usize) 
 
     pub fn set(&mut self, inode_num: usize) {
+        assert!(inode_num < self.bitmap.len());
         self.bitmap.set(inode_num, true);
     }
+
+    pub fn get(&self, inode_num: usize) -> bool {
+        assert!(inode_num < self.bitmap.len());
+        *self.bitmap.get(inode_num).unwrap()
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.bitmap.all()
+    }
+
+    pub fn find_first_free(&self) -> Option<usize> {
+        self.bitmap.first_zero()
+    }
 }
-
-
