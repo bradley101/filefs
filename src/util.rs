@@ -18,4 +18,45 @@ pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 1;
 pub const SUPER_BLOCK_FILE_OFFSET: u64 = 0;
 pub const SUPER_BLOCK_SIZE: usize = 1 << 8;
 
+pub trait Path {
+    fn to_le_bytes(&self) -> &[u8];
+    fn to_String(&self) -> String;
+}
+
+impl Path for String {
+    fn to_le_bytes(&self) -> &[u8] {
+        self.as_bytes()
+    }
+    fn to_String(&self) -> String {
+        self.clone()
+    }
+}
+
+impl Path for &str {
+    fn to_le_bytes(&self) -> &[u8] {
+        self.as_bytes()
+    }
+    fn to_String(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl Path for [u8] {
+    fn to_le_bytes(&self) -> &[u8] {
+        self
+    }
+    fn to_String(&self) -> String {
+        String::from_utf8(self.to_vec()).unwrap_or_default()
+    }
+}
+
+impl Path for &[u8] {
+    fn to_le_bytes(&self) -> &[u8] {
+        self
+    }
+    fn to_String(&self) -> String {
+        String::from_utf8(self.to_vec()).unwrap_or_default()
+    }
+}
+
 
