@@ -2,7 +2,7 @@
 use std::{io::Cursor, os::unix::fs::FileExt};
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::util::INODE_SIZE;
+use crate::util::{Path, INODE_SIZE};
 
 use super::block_bitmap::BlockBitmap;
 use super::inode_bitmap::InodeBitmap;
@@ -28,13 +28,14 @@ pub struct Inode {
 }
 
 impl Inode {
-    pub fn create_new
-        (parent: &Inode,
-         name: &String,
+    pub fn create_new<T: Path>
+        (parent: u16,
+         name: T,
          file_type: FileType,
          super_block_ref: &SuperBlock,
          inode_bitmap_ref: &InodeBitmap) -> Result<Self, std::io::Error>
     {
+        let name = name.to_String();
         if name.len() > crate::util::MAX_FILE_NAME_SIZE {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "File name too long"));
         }
@@ -46,8 +47,8 @@ impl Inode {
         let inode_number = inode_bitmap_ref.find_first_free().expect("No free inodes available") as u16;
         let new_inode = Self {
             inode_number,
-            parent: parent.inode_number,
-            name: name.clone(),
+            parent: parent,
+            name: name,
             data_blocks: [0_u16; 32],
             block_bitmap: BlockBitmap::new(super_block_ref.get_total_blocks() as usize),
             file_type,

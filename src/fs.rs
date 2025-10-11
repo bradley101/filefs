@@ -4,12 +4,13 @@ use crate::core::block_bitmap::BlockBitmap;
 use crate::core::super_block::SuperBlock;
 use crate::core::inode::{ Inode, FileType };
 use crate::core::inode_bitmap::InodeBitmap;
+use crate::entity::directory::Directory;
+use crate::util::Path;
 
 struct ffs {
     super_block: SuperBlock,
     underlying_file: Option<File>,
-    cwd: Inode,
-    root: Inode,
+    cwd: Directory,
     inode_bitmap: InodeBitmap,
     block_bitmap: BlockBitmap,
 }
@@ -19,8 +20,7 @@ impl Default for ffs {
         ffs {
             super_block: SuperBlock::default(),
             underlying_file: None,
-            cwd: Inode::default(),
-            root: Inode::default(),
+            cwd: Directory::default(),
             inode_bitmap: InodeBitmap::default(),
             block_bitmap: BlockBitmap::default(),
         }
@@ -85,11 +85,12 @@ impl ffs {
             return Err(err);
         }
 
-        if let Err(err) = self.load_root_inode() {
-            return Err(err);
+        let tmp_res = Inode::load(self.underlying_file.as_mut().unwrap(), 0, &self.super_block);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
         }
 
-        self.cwd = self.root.clone();
+        self.cwd = Directory::new(tmp_res.unwrap());
         Ok(())
     }
 
@@ -112,11 +113,14 @@ impl ffs {
             return Err(err);
         }
 
-        if let Err(err) = self.create_root_inode() {
-            return Err(err);
+        // Create the root inode
+        let tmp_res = Inode::create_new(
+            0, "/", FileType::Directory, &self.super_block, &self.inode_bitmap);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
         }
 
-        self.cwd = self.root.clone();
+        self.cwd = Directory::new(tmp_res.unwrap());
         Ok(())
     }
 
@@ -208,28 +212,28 @@ impl ffs {
             return Err(tmp_res.err().unwrap());
         }
 
-        self.root = tmp_res.unwrap();
+        // self.root = tmp_res.unwrap();
         Ok(())
     }
     
-    fn create_root_inode(&mut self) -> Result<(), std::io::Error> {
-        let f = self.underlying_file.as_mut().unwrap();
-        self.root = Inode::default();
-        self.root.name = String::from("/");
-        self.root.inode_number = 0;
-        self.root.file_type = FileType::Directory;
+    // fn create_root_inode(&mut self) -> Result<(), std::io::Error> {
+    //     let f = self.underlying_file.as_mut().unwrap();
+    //     self.root = Inode::default();
+    //     self.root.name = String::from("/");
+    //     self.root.inode_number = 0;
+    //     self.root.file_type = FileType::Directory;
         
-        let tmp_res = self.root.persist(f, &self.super_block);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
+    //     let tmp_res = self.root.persist(f, &self.super_block);
+    //     if tmp_res.is_err() {
+    //         return Err(tmp_res.err().unwrap());
+    //     }
 
-        self.inode_bitmap.set(0);
-        self.inode_bitmap.persist(f, &self.super_block)
-    }
+    //     self.inode_bitmap.set(0);
+    //     self.inode_bitmap.persist(f, &self.super_block)
+    // }
 
-    fn create_new_file(&mut self, file_name: &String, file_type: FileType) -> Result<(), std::io::Error> {
-        let new_inode = Inode::create_new(&self.cwd,
+    fn create_new_file<T: Path>(&mut self, file_name: T, file_type: FileType) -> Result<(), std::io::Error> {
+        let new_inode = Inode::create_new(self.cwd.get_inode_number(),
                                                                 file_name,
                                                                 FileType::File,
                                                                 &self.super_block,
