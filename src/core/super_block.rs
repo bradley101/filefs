@@ -1,6 +1,6 @@
 use std::{cmp::max, fs::File, os::unix::fs::FileExt};
 
-use super::{block::Block, block_data_types::BlockDataType};
+use super::{block::Block, block_data_types::BlockDataType, inode::Inode};
 
 use crate::util::{
     SUPER_BLOCK_FILE_OFFSET,
