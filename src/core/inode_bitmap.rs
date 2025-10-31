@@ -4,7 +4,7 @@ use std::os::unix::fs::FileExt;
 use bitvec::prelude::*;
 
 use super::{block::Block, block_data_types::BlockDataType, super_block::SuperBlock};
-use crate::util::INODE_BITMAP_STARTING_BLOCK_NUMBER;
+use crate::{medium::types::byte_compatible, util::INODE_BITMAP_STARTING_BLOCK_NUMBER};
 
 #[derive(Clone, Default)]
 pub struct InodeBitmap {
@@ -20,12 +20,12 @@ impl InodeBitmap {
         }
     }
 
-    pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let blocks = self.serialize(super_block_ref);
 
         for block in blocks {
             let block_offset = block.block_number as u64 * super_block_ref.get_block_size() as u64;
-            let tmp_res = file.write_all_at(block.data.as_slice(), block_offset);
+            let tmp_res = medium.write_all(block_offset, block.data.len(), block.data.as_slice());
             if tmp_res.is_err() {
                 return Err(tmp_res.err().unwrap());
             }
@@ -39,7 +39,7 @@ impl InodeBitmap {
         then fetch that many blocks from the inode bitmap starting block offset,
         then pass the vec to the deserialize function to generate a InodeBitmap
     */
-    pub fn fetch(file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+    pub fn fetch<T: byte_compatible>(medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
         let total_inode_bitmap_blocks = super_block_ref.get_inode_bitmap_block_count();
         let mut blocks: Vec<Block> = Vec::with_capacity(total_inode_bitmap_blocks);
         let mut start = INODE_BITMAP_STARTING_BLOCK_NUMBER as u64 * super_block_ref.get_block_size() as u64;
@@ -47,7 +47,7 @@ impl InodeBitmap {
         for i in 0..total_inode_bitmap_blocks {
             let block = Block::default();
             let mut buffer = vec![0_u8; super_block_ref.get_block_size()];
-            let tmp_res = file.read_exact_at(buffer.as_mut_slice(), start);
+            let tmp_res = medium.read_all(start, buffer.len(), buffer.as_mut_slice());
             if tmp_res.is_err() {
                 return Err(tmp_res.err().unwrap());
             }

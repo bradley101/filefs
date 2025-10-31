@@ -6,6 +6,7 @@
 use crate::core::inode::{FileType, Inode};
 use crate::core::inode_bitmap::InodeBitmap;
 use crate::core::super_block::SuperBlock;
+use crate::medium::types::byte_compatible;
 use crate::util::Path;
 
 #[derive(Debug, Clone, Default)]
@@ -22,13 +23,13 @@ impl Directory {
         self.inode.inode_number
     }
 
-    pub fn create_new<T: Path>(
+    pub fn create_new<T: Path, M: byte_compatible>(
         ftype: FileType,
         name: T,
         parent: Option<&Directory>,
         super_block_ref: &SuperBlock,
         inode_bitmap_ref: &mut InodeBitmap,
-        file: &mut std::fs::File
+        medium: &mut M
     ) -> Result<Self, std::io::Error> {
         let inode = Inode::create_new(
             if parent.is_none() { 0 } else { parent.unwrap().get_inode_number() },
@@ -43,12 +44,12 @@ impl Directory {
         let inode = inode.unwrap();
         inode_bitmap_ref.set(inode.inode_number as usize);
 
-        let tmp_res = inode.persist(file, super_block_ref);
+        let tmp_res = inode.persist(medium, super_block_ref);
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
 
-        let tmp_res = inode_bitmap_ref.persist(file, super_block_ref);
+        let tmp_res = inode_bitmap_ref.persist(medium, super_block_ref);
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }
@@ -56,13 +57,13 @@ impl Directory {
         Ok(Self { inode  })
     }
 
-    pub fn load(
+    pub fn load<T: byte_compatible>(
         inode_num: u16,
         super_block_ref: &SuperBlock,
-        file: &mut std::fs::File) -> Result<Self, std::io::Error>
+        medium: &mut T) -> Result<Self, std::io::Error>
     {
         let tmp_res = Inode::load(
-            file,
+            medium,
             0,
             super_block_ref);
         if tmp_res.is_err() {

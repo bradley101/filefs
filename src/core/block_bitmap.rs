@@ -4,7 +4,7 @@ use std::{io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
 use bitvec::prelude::*;
 
 use super::{block::Block, block_data_types::BlockDataType, super_block::SuperBlock};
-use crate::util::INODE_BITMAP_STARTING_BLOCK_NUMBER;
+use crate::{medium::types::byte_compatible, util::INODE_BITMAP_STARTING_BLOCK_NUMBER};
 
 #[derive(Debug, Clone, Default)]
 pub struct BlockBitmap {
@@ -21,18 +21,12 @@ impl BlockBitmap {
         }
     }
 
-    pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let blocks = self.serialize(super_block_ref);
 
-        let tmp_res = 
-            file.seek(SeekFrom::Start(blocks[0].block_number as u64 * super_block_ref.get_block_size() as u64));
-        
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
         for block in blocks {
-            let tmp_res = file.write_all(&block.data);
+            let block_offset = block.block_number as u64 * super_block_ref.get_block_size() as u64;
+            let tmp_res = medium.write_all(block_offset, block.data.len(), block.data.as_slice());
             if tmp_res.is_err() {
                 return Err(tmp_res.err().unwrap());
             }
@@ -41,7 +35,7 @@ impl BlockBitmap {
         Ok(())
     }
 
-    pub fn fetch(file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+    pub fn fetch<T: byte_compatible>(medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
         let total_block_bitmap_blocks = super_block_ref.get_block_bitmap_block_count();
         let mut blocks: Vec<Block> = Vec::with_capacity(total_block_bitmap_blocks);
         let mut start = ((1 + super_block_ref.get_inode_bitmap_block_count()) * super_block_ref.get_block_size()) as u64;
@@ -49,7 +43,7 @@ impl BlockBitmap {
         for i in 0..total_block_bitmap_blocks {
             let block = Block::default();
             let mut buffer = vec![0_u8; super_block_ref.get_block_size()];
-            let tmp_res = file.read_exact_at(buffer.as_mut_slice(), start);
+            let tmp_res = medium.read_all(start, buffer.len(), buffer.as_mut_slice());
             if tmp_res.is_err() {
                 return Err(tmp_res.err().unwrap());
             }
