@@ -7,7 +7,7 @@ use crate::core::inode_bitmap::InodeBitmap;
 use crate::entity::directory::Directory;
 use crate::util::Path;
 
-struct ffs {
+pub struct ffs {
     super_block: SuperBlock,
     underlying_file: Option<File>,
     cwd: Directory,
