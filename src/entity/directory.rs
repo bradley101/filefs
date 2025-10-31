@@ -25,12 +25,13 @@ impl Directory {
     pub fn create_new<T: Path>(
         ftype: FileType,
         name: T,
-        parent: &Directory,
+        parent: Option<&Directory>,
         super_block_ref: &SuperBlock,
-        inode_bitmap_ref: &mut InodeBitmap
+        inode_bitmap_ref: &mut InodeBitmap,
+        file: &mut std::fs::File
     ) -> Result<Self, std::io::Error> {
         let inode = Inode::create_new(
-            parent.get_inode_number(),
+            if parent.is_none() { 0 } else { parent.unwrap().get_inode_number() },
             name,
             ftype,
             super_block_ref,
@@ -39,6 +40,36 @@ impl Directory {
             return Err(inode.err().unwrap());
         }
 
-        Ok(Self { inode : inode.unwrap() })
+        let inode = inode.unwrap();
+        inode_bitmap_ref.set(inode.inode_number as usize);
+
+        let tmp_res = inode.persist(file, super_block_ref);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        let tmp_res = inode_bitmap_ref.persist(file, super_block_ref);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        Ok(Self { inode  })
     }
+
+    pub fn load(
+        inode_num: u16,
+        super_block_ref: &SuperBlock,
+        file: &mut std::fs::File) -> Result<Self, std::io::Error>
+    {
+        let tmp_res = Inode::load(
+            file,
+            0,
+            super_block_ref);
+        if tmp_res.is_err() {
+            return Err(tmp_res.err().unwrap());
+        }
+
+        Ok(Directory::new(tmp_res.unwrap()))
+    }
+
 }
