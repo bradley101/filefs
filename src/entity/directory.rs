@@ -57,10 +57,10 @@ impl Directory {
         Ok(Self { inode  })
     }
 
-    pub fn load<T: byte_compatible>(
+    pub fn load<M: byte_compatible>(
         inode_num: u16,
         super_block_ref: &SuperBlock,
-        medium: &mut T) -> Result<Self, std::io::Error>
+        medium: &mut M) -> Result<Self, std::io::Error>
     {
         let tmp_res = Inode::load(
             medium,

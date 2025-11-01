@@ -45,7 +45,7 @@ impl SuperBlock {
         }
     }
 
-    pub fn persist<T: byte_compatible>(&self, medium: &mut T) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: &mut &T) -> std::io::Result<()> {
         let buffer = self.serialize();
         medium.write_all(SUPER_BLOCK_FILE_OFFSET, buffer.data.len(), buffer.data.as_slice())
     }
