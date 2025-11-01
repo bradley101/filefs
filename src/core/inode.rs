@@ -2,6 +2,7 @@
 use std::{io::Cursor, os::unix::fs::FileExt};
 use byteorder::{LittleEndian, ReadBytesExt};
 
+use crate::medium::types::byte_compatible;
 use crate::util::{Path, INODE_SIZE};
 
 use super::block_bitmap::BlockBitmap;
@@ -57,12 +58,12 @@ impl Inode {
 
         Ok(new_inode)
     }
-    pub fn persist(&self, file: &mut std::fs::File, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let buffer = self.serialize();
         let inode_offset = 
             super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
             + (INODE_SIZE as u64 * self.inode_number as u64);
-        file.write_all_at(buffer.as_slice(), inode_offset)
+        medium.write_all(inode_offset, buffer.len(), buffer.as_slice())
     }
 
     fn serialize(&self) -> Vec<u8> {
@@ -92,13 +93,13 @@ impl Inode {
 
     // fn deserialize(buffer: Vec<u8>) -> 
 
-    pub fn load(file: &mut std::fs::File, inode_number: u16, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+    pub fn load<T: byte_compatible>(medium: &mut T, inode_number: u16, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
         let inode_offset = 
             super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
             + (INODE_SIZE as u64 * inode_number as u64);
         
         let mut buffer = vec![0_u8; INODE_SIZE];
-        let tmp_res = file.read_exact_at(&mut buffer, inode_offset);
+        let tmp_res = medium.read_all(inode_offset, buffer.len(), &mut buffer);
 
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());

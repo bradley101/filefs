@@ -2,11 +2,9 @@ use std::{cmp::max, fs::File, os::unix::fs::FileExt};
 
 use super::{block::Block, block_data_types::BlockDataType, inode::Inode};
 
-use crate::util::{
-    SUPER_BLOCK_FILE_OFFSET,
-    SUPER_BLOCK_SIZE,
-    INODE_SIZE
-};
+use crate::{medium::types::byte_compatible, util::{
+    INODE_SIZE, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE
+}};
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct SuperBlock {
@@ -47,9 +45,9 @@ impl SuperBlock {
         }
     }
 
-    pub fn persist(&self, file: &mut File) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: &mut &T) -> std::io::Result<()> {
         let buffer = self.serialize();
-        file.write_all_at(buffer.data.as_slice(), SUPER_BLOCK_FILE_OFFSET)
+        medium.write_all(SUPER_BLOCK_FILE_OFFSET, buffer.data.len(), buffer.data.as_slice())
     }
 
     #[inline(always)]
@@ -104,12 +102,12 @@ impl SuperBlock {
         }
     }
 
-    pub fn deserialize(file: &mut File) -> Result<SuperBlock, std::io::Error> {
+    pub fn deserialize<T: byte_compatible>(file: &mut T) -> Result<SuperBlock, std::io::Error> {
         let mut block = Block::default();
         block.data.resize(SUPER_BLOCK_SIZE, 0);
 
         let tmp_res =
-            file.read_exact_at(block.data.as_mut_slice(), SUPER_BLOCK_FILE_OFFSET);
+            file.read_all(SUPER_BLOCK_FILE_OFFSET, block.data.len(), block.data.as_mut_slice());
         
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
