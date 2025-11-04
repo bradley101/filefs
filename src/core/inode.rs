@@ -2,6 +2,7 @@
 use std::{io::Cursor, os::unix::fs::FileExt};
 use byteorder::{LittleEndian, ReadBytesExt};
 
+use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
 use crate::util::{Path, INODE_SIZE};
 
@@ -29,19 +30,18 @@ pub struct Inode {
 }
 
 impl Inode {
-    pub fn create_new<T: Path>
+    pub fn create_new<T: Path, M: byte_compatible>
         (parent: u16,
          name: T,
          file_type: FileType,
-         super_block_ref: &SuperBlock,
-         inode_bitmap_ref: &InodeBitmap) -> Result<Self, std::io::Error>
+         metadata: &mut fs_metadata<M>) -> Result<Self, std::io::Error>
     {
         let name = name.to_String();
         if name.len() > crate::util::MAX_FILE_NAME_SIZE {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "File name too long"));
         }
 
-        if inode_bitmap_ref.is_full() {
+        if metadata.inode_bitmap_ref.is_full() {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "No free inodes available"));
         }
 
