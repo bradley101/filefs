@@ -95,9 +95,9 @@ impl <T: byte_compatible> ffs<T> {
             FileType::Directory,
             "/",
             None,
-            &self.super_block,
-            &mut self.inode_bitmap,
-            self.medium.as_mut().unwrap());
+            &mut self.metadata,
+            self.medium.as_mut().unwrap(),
+        );
         if tmp_res.is_err() {
             return Err(tmp_res.err().unwrap());
         }

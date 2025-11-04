@@ -20,7 +20,7 @@ impl InodeBitmap {
         }
     }
 
-    pub fn persist<T: byte_compatible>(&self, medium: &mut &T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let blocks = self.serialize(super_block_ref);
 
         for block in blocks {
