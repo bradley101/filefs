@@ -96,9 +96,9 @@ impl Inode {
 
     // fn deserialize(buffer: Vec<u8>) -> 
 
-    pub fn load<T: byte_compatible>(medium: &mut T, inode_number: u16, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+    pub fn load<T: byte_compatible>(medium: &mut T, inode_number: u16, metadata: &fs_metadata<T>) -> std::io::Result<Self> {
         let inode_offset = 
-            super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
+            metadata.super_block_get_inode_start_block() as u64 * metadata.super_block_get_block_size() as u64
             + (INODE_SIZE as u64 * inode_number as u64);
         
         let mut buffer = vec![0_u8; INODE_SIZE];

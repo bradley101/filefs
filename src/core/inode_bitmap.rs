@@ -39,7 +39,7 @@ impl InodeBitmap {
         then fetch that many blocks from the inode bitmap starting block offset,
         then pass the vec to the deserialize function to generate a InodeBitmap
     */
-    pub fn fetch<T: byte_compatible>(medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+    pub fn fetch<T: byte_compatible>(medium: &mut &T, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
         let total_inode_bitmap_blocks = super_block_ref.get_inode_bitmap_block_count();
         let mut blocks: Vec<Block> = Vec::with_capacity(total_inode_bitmap_blocks);
         let mut start = INODE_BITMAP_STARTING_BLOCK_NUMBER as u64 * super_block_ref.get_block_size() as u64;

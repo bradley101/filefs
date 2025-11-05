@@ -1,29 +1,28 @@
 
-use crate::core::block_bitmap::BlockBitmap;
-use crate::core::super_block::SuperBlock;
+use std::cell::RefCell;
+
 use crate::core::inode::FileType;
-use crate::core::inode_bitmap::InodeBitmap;
 use crate::entity::directory::Directory;
 use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
 
-pub struct ffs<T: byte_compatible> {
-    metadata: fs_metadata,
-    medium: Option<T>,
+pub struct ffs<'a, T: byte_compatible> {
+    metadata: fs_metadata<'a, T>,
+    medium: RefCell<Option<T>>,
     cwd: Directory,
 }
 
-impl <T: byte_compatible> Default for ffs<T> {
+impl <'a, T: byte_compatible> Default for ffs<'a, T> {
     fn default() -> Self {
         ffs {
             metadata: fs_metadata::default(),
-            medium: None,
+            medium: RefCell::new(None),
             cwd: Directory::default(),
         }
     }
 }
 
-impl <T: byte_compatible> ffs<T> {
+impl <'a, T: byte_compatible> ffs<'a, T> {
     pub fn load(medium: T) -> Option<Self> {
         let mut inst = ffs::default();
 
@@ -47,114 +46,57 @@ impl <T: byte_compatible> ffs<T> {
     }
 
     fn init
-        (&mut self, new: bool, medium: T, size: u32, block_size: u32, bytes_per_inode: u32)
+        (&'a mut self, new: bool, medium: T, size: u32, block_size: u32, bytes_per_inode: u32)
         -> Result<(), std::io::Error>
     {
+        self.medium = RefCell::new(Some(medium));
         if new {
-            return self.create_new(medium, size, block_size, bytes_per_inode)
-        } else {
-            return self.load_existing(medium);
+            return self.create_new(size, block_size, bytes_per_inode)
         }
+        self.load_existing()
     }
 
-    fn load_existing(&mut self, medium: T) -> Result<(), std::io::Error>
+    fn load_existing(&'a mut self) -> Result<(), std::io::Error>
     {
-        self.medium = Some(medium);
-
-        if let Err(err) = self.fetch_super_block() {
-            return Err(err);
-        }
-
-        if let Err(err) = self.load_root_directory() {
-            return Err(err);
-        }
-
+        self.metadata = fs_metadata::fetch(&*self.medium.borrow_mut().as_mut().unwrap())?;
+        self.cwd = Directory::load(
+            0,
+            &self.metadata,
+            self.medium.as_mut().unwrap()
+        )?;
         Ok(())
     }
 
     fn create_new
-        (&mut self, medium: T, size: u32, block_size: u32, bytes_per_inode: u32)
+        (&'a mut self, size: u32, block_size: u32, bytes_per_inode: u32)
         -> Result<(), std::io::Error>
     {
-        self.medium = Some(medium);
-
-        if let Err(err) = self.create_new_super_block(size, block_size, bytes_per_inode) {
-            return Err(err);
-        }
-
-        if let Err(err) = self.create_root_directory() {
-            return Err(err);
-        }
-
-        Ok(())
-    }
-
-    fn create_root_directory(&mut self) -> Result<(), std::io::Error> {
-         // Create the root directory
-         let tmp_res = Directory::create_new(
-            FileType::Directory,
-            "/",
-            None,
-            &mut self.metadata,
-            self.medium.as_mut().unwrap(),
-        );
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        self.cwd = tmp_res.unwrap();
+        self.metadata = fs_metadata::create_new(
+                            self.medium.as_ref().unwrap(),
+                            size,
+                            block_size,
+                            bytes_per_inode)?;
+        self.cwd = Directory::create_new(
+                    FileType::Directory,
+                    "/",
+                    None,
+                    &mut self.metadata)?;
         Ok(())
     }
 
     fn load_root_directory(&mut self) -> Result<(), std::io::Error> {
-        let tmp_res = Directory::load(0, &self.super_block, self.medium.as_mut().unwrap());
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
+        self.cwd = Directory::load(
+            0,
+            &self.metadata,
+            self.medium.as_mut().unwrap()
+        )?;
 
-        self.cwd = tmp_res.unwrap();
         Ok(())
     }
 
-    fn create_new_super_block
-        (&mut self, fs_size: u32, block_size: u32, bytes_per_inode: u32)
-        -> Result<(), std::io::Error>
-    {
-        let tmp_res = fs_metadata::create_new(
-            self.medium.as_mut().unwrap(),
-            fs_size,
-            block_size,
-            bytes_per_inode);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        self.metadata = tmp_res.unwrap();
-        Ok(())
-    }
-
-    fn fetch_super_block(&mut self) -> Result<(), std::io::Error> {
-        let f = self.medium.as_mut().unwrap();
-
-        let tmp_res = SuperBlock::deserialize(f);
-        if tmp_res.is_err(){
-            return Err(tmp_res.err().unwrap());
-        }
-        self.super_block = tmp_res.unwrap();
-
-        // Fetch the inode bitmap
-        let tmp_res = InodeBitmap::fetch(f, &self.super_block);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-        self.inode_bitmap = tmp_res.unwrap();
-
-        // Fetch the block bitmap
-        let tmp_res = BlockBitmap::fetch(f, &self.super_block);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-        self.block_bitmap = tmp_res.unwrap();
+    fn fetch_metadata(&'a mut self) -> Result<(), std::io::Error> {
+        let f = self.medium.as_ref().unwrap();
+        self.metadata = fs_metadata::fetch(f)?;
         Ok(())
     }
 

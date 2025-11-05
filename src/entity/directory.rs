@@ -4,8 +4,6 @@
 */
 
 use crate::core::inode::{FileType, Inode};
-use crate::core::inode_bitmap::InodeBitmap;
-use crate::core::super_block::SuperBlock;
 use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
 use crate::util::Path;
@@ -28,8 +26,7 @@ impl Directory {
         ftype: FileType,
         name: T,
         parent: Option<&Directory>,
-        metadata: &mut fs_metadata<M>,
-        medium: &mut M
+        metadata: &mut fs_metadata<M>
     ) -> Result<Self, std::io::Error> {
         Ok(Self { 
             inode: Inode::create_new(
@@ -42,18 +39,13 @@ impl Directory {
 
     pub fn load<M: byte_compatible>(
         inode_num: u16,
-        super_block_ref: &SuperBlock,
+        metadata: &fs_metadata<M>,
         medium: &mut M) -> Result<Self, std::io::Error>
     {
-        let tmp_res = Inode::load(
+        Ok(Directory::new(Inode::load(
             medium,
             0,
-            super_block_ref);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        Ok(Directory::new(tmp_res.unwrap()))
+            metadata)?))
     }
 
 }

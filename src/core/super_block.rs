@@ -102,7 +102,7 @@ impl SuperBlock {
         }
     }
 
-    pub fn deserialize<T: byte_compatible>(file: &mut T) -> Result<SuperBlock, std::io::Error> {
+    pub fn deserialize<T: byte_compatible>(file: &mut &T) -> Result<SuperBlock, std::io::Error> {
         let mut block = Block::default();
         block.data.resize(SUPER_BLOCK_SIZE, 0);
 
