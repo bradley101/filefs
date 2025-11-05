@@ -22,7 +22,7 @@ impl <'a, T: byte_compatible> Default for fs_metadata<'a, T> {
 
 impl <'a, T: byte_compatible> fs_metadata<'a, T> {
     
-    pub fn create_new(medium: &'a mut T, fs_size: u32, block_size: u32, bytes_per_inode: u32) -> Result<Self, Error>
+    pub fn create_new(medium: &'a T, fs_size: u32, block_size: u32, bytes_per_inode: u32) -> Result<Self, Error>
     {
         let mut md = fs_metadata::<'a, T>::default();
         md.medium = Some(medium);
@@ -63,12 +63,33 @@ impl <'a, T: byte_compatible> fs_metadata<'a, T> {
         Ok(md)
     }
 
+    pub fn fetch(medium: &'a T) -> Result<Self, Error>
+    {
+        let mut md = fs_metadata::<'a, T>::default();
+        md.medium = Some(medium);
+        let md_mut_ref = md.medium.as_mut().unwrap();
+
+        md.super_block = SuperBlock::deserialize(md_mut_ref)?;
+        md.inode_bitmap = InodeBitmap::fetch(md_mut_ref, &md.super_block)?;
+        md.block_bitmap = BlockBitmap::fetch(md_mut_ref, &md.super_block)?;
+
+        Ok(md)
+    }
+
     fn persist_super_block(&mut self) -> Result<(), std::io::Error> {
         self.super_block.persist(self.medium.as_mut().unwrap())
     }
 
     pub fn super_block_get_total_blocks(&self) -> usize {
         self.super_block.get_total_blocks()
+    }
+
+    pub fn super_block_get_inode_start_block(&self) -> usize {
+        self.super_block.get_inode_start_block()
+    }
+
+    pub fn super_block_get_block_size(&self) -> usize {
+        self.super_block.get_block_size()
     }
 
     pub fn persist_inode_bitmap(&mut self) -> Result<(), std::io::Error> {
