@@ -1,6 +1,6 @@
 use std::io::Error;
 
-use crate::{core::{block_bitmap::BlockBitmap, inode_bitmap::InodeBitmap, super_block::SuperBlock}, medium::types::byte_compatible};
+use crate::{core::{block_bitmap::BlockBitmap, inode::Inode, inode_bitmap::InodeBitmap, super_block::SuperBlock}, medium::types::byte_compatible};
 
 pub struct fs_metadata<'a, T: byte_compatible> {
     super_block: SuperBlock,
@@ -67,12 +67,32 @@ impl <'a, T: byte_compatible> fs_metadata<'a, T> {
         self.super_block.persist(self.medium.as_mut().unwrap())
     }
 
-    fn persist_inode_bitmap(&mut self) -> Result<(), std::io::Error> {
+    pub fn super_block_get_total_blocks(&self) -> usize {
+        self.super_block.get_total_blocks()
+    }
+
+    pub fn persist_inode_bitmap(&mut self) -> Result<(), std::io::Error> {
         self.inode_bitmap.persist(self.medium.as_mut().unwrap(), &self.super_block)
+    }
+
+    pub fn persist_inode(&mut self, inode: &Inode) -> Result<(), std::io::Error> {
+        inode.persist(self.medium.as_mut().unwrap(), &self.super_block)
+    }
+
+    pub fn set_inode_in_bitmap(&mut self, inode: u16) {
+        self.inode_bitmap.set(inode as usize);
     }
 
     fn persist_block_bitmap(&mut self) -> Result<(), std::io::Error> {
         self.block_bitmap.persist(self.medium.as_mut().unwrap(), &self.super_block)
+    }
+
+    pub fn is_inode_bitmap_full(&self) -> bool {
+        self.inode_bitmap.is_full()
+    }
+
+    pub fn inode_find_first_free(&self) -> Option<usize> {
+        self.inode_bitmap.find_first_free()
     }
 }
 

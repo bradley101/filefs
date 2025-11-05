@@ -31,29 +31,13 @@ impl Directory {
         metadata: &mut fs_metadata<M>,
         medium: &mut M
     ) -> Result<Self, std::io::Error> {
-        let inode = Inode::create_new(
-            if parent.is_none() { 0 } else { parent.unwrap().get_inode_number() },
-            name,
-            ftype,
-            metadata);
-        if inode.is_err() {
-            return Err(inode.err().unwrap());
-        }
-
-        let inode = inode.unwrap();
-        inode_bitmap_ref.set(inode.inode_number as usize);
-
-        let tmp_res = inode.persist(medium, super_block_ref);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        let tmp_res = inode_bitmap_ref.persist(medium, super_block_ref);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        Ok(Self { inode  })
+        Ok(Self { 
+            inode: Inode::create_new(
+                if parent.is_none() { 0 } else { parent.unwrap().get_inode_number() },
+                name,
+                ftype,
+                metadata)?
+        })
     }
 
     pub fn load<M: byte_compatible>(

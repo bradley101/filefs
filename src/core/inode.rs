@@ -41,24 +41,27 @@ impl Inode {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "File name too long"));
         }
 
-        if metadata.inode_bitmap_ref.is_full() {
+        if metadata.is_inode_bitmap_full() {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "No free inodes available"));
         }
 
-        let inode_number = inode_bitmap_ref.find_first_free().expect("No free inodes available") as u16;
+        let inode_number = metadata.inode_find_first_free().expect("No free inodes available") as u16;
         let new_inode = Self {
             inode_number,
             parent: parent,
             name: name,
             data_blocks: [0_u16; 32],
-            block_bitmap: BlockBitmap::new(super_block_ref.get_total_blocks() as usize),
+            block_bitmap: BlockBitmap::new(metadata.super_block_get_total_blocks() as usize),
             file_type,
             file_size: 0,
         };
+        metadata.set_inode_in_bitmap(inode_number);
+        metadata.persist_inode_bitmap()?;
+        metadata.persist_inode(&new_inode)?;
 
         Ok(new_inode)
     }
-    pub fn persist<T: byte_compatible>(&self, medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: &mut &T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let buffer = self.serialize();
         let inode_offset = 
             super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
