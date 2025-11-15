@@ -1,4 +1,4 @@
-use std::{cmp::max, fs::File, os::unix::fs::FileExt};
+use std::{cell::RefMut, cmp::max, fs::File, os::unix::fs::FileExt};
 
 use super::{block::Block, block_data_types::BlockDataType, inode::Inode};
 
@@ -45,7 +45,7 @@ impl SuperBlock {
         }
     }
 
-    pub fn persist<T: byte_compatible>(&self, medium: &mut &T) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: RefMut<'_, T>) -> std::io::Result<()> {
         let buffer = self.serialize();
         medium.write_all(SUPER_BLOCK_FILE_OFFSET, buffer.data.len(), buffer.data.as_slice())
     }
@@ -102,7 +102,7 @@ impl SuperBlock {
         }
     }
 
-    pub fn deserialize<T: byte_compatible>(file: &mut &T) -> Result<SuperBlock, std::io::Error> {
+    pub fn deserialize<T: byte_compatible>(file: RefMut<'_, T>) -> Result<SuperBlock, std::io::Error> {
         let mut block = Block::default();
         block.data.resize(SUPER_BLOCK_SIZE, 0);
 

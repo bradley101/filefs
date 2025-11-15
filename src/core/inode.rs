@@ -1,4 +1,5 @@
 
+use std::cell::RefMut;
 use std::{io::Cursor, os::unix::fs::FileExt};
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -61,7 +62,7 @@ impl Inode {
 
         Ok(new_inode)
     }
-    pub fn persist<T: byte_compatible>(&self, medium: &mut &T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: RefMut<'_, T>, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let buffer = self.serialize();
         let inode_offset = 
             super_block_ref.get_inode_start_block() as u64 * super_block_ref.get_block_size() as u64
