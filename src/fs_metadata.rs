@@ -1,15 +1,15 @@
-use std::io::Error;
+use std::{cell::RefCell, io::Error, rc::Rc};
 
 use crate::{core::{block_bitmap::BlockBitmap, inode::Inode, inode_bitmap::InodeBitmap, super_block::SuperBlock}, medium::types::byte_compatible};
 
-pub struct fs_metadata<'a, T: byte_compatible> {
+pub struct fs_metadata<T: byte_compatible> {
     super_block: SuperBlock,
     inode_bitmap: InodeBitmap,
     block_bitmap: BlockBitmap,
-    medium: Option<&'a T>
+    medium: Option<Rc<RefCell<T>>>
 }
 
-impl <'a, T: byte_compatible> Default for fs_metadata<'a, T> {
+impl <T: byte_compatible> Default for fs_metadata<T> {
     fn default() -> Self {
         Self {
             super_block: SuperBlock::default(),
@@ -20,11 +20,11 @@ impl <'a, T: byte_compatible> Default for fs_metadata<'a, T> {
     }
 }
 
-impl <'a, T: byte_compatible> fs_metadata<'a, T> {
+impl <T: byte_compatible> fs_metadata<T> {
     
-    pub fn create_new(medium: &'a T, fs_size: u32, block_size: u32, bytes_per_inode: u32) -> Result<Self, Error>
+    pub fn create_new(medium: Rc<RefCell<T>>, fs_size: u32, block_size: u32, bytes_per_inode: u32) -> Result<Self, Error>
     {
-        let mut md = fs_metadata::<'a, T>::default();
+        let mut md = fs_metadata::<T>::default();
         md.medium = Some(medium);
         
         md.super_block = SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
