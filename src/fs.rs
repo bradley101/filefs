@@ -1,14 +1,15 @@
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::core::inode::FileType;
 use crate::entity::directory::Directory;
 use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
 
-pub struct ffs<'a, T: byte_compatible> {
-    metadata: fs_metadata<'a, T>,
-    medium: RefCell<Option<T>>,
+pub struct ffs<T: byte_compatible> {
+    metadata: fs_metadata<T>,
+    medium: Rc<RefCell<Option<T>>>,
     cwd: Directory,
 }
 
@@ -16,7 +17,7 @@ impl <'a, T: byte_compatible> Default for ffs<'a, T> {
     fn default() -> Self {
         ffs {
             metadata: fs_metadata::default(),
-            medium: RefCell::new(None),
+            medium: Rc::new(RefCell::new(None)),
             cwd: Directory::default(),
         }
     }
