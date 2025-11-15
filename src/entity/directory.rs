@@ -3,6 +3,8 @@
     it contains, the corresponding Inode, and helper functions
 */
 
+use std::cell::RefMut;
+
 use crate::core::inode::{FileType, Inode};
 use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
@@ -40,7 +42,7 @@ impl Directory {
     pub fn load<M: byte_compatible>(
         inode_num: u16,
         metadata: &fs_metadata<M>,
-        medium: &mut M) -> Result<Self, std::io::Error>
+        medium: RefMut<'_, M>) -> Result<Self, std::io::Error>
     {
         Ok(Directory::new(Inode::load(
             medium,
