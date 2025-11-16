@@ -1,6 +1,6 @@
-use std::{cell::RefMut, cmp::max, fs::File, os::unix::fs::FileExt};
+use std::{cell::RefMut, cmp::max};
 
-use super::{block::Block, block_data_types::BlockDataType, inode::Inode};
+use super::{block::Block, block_data_types::BlockDataType};
 
 use crate::{medium::types::byte_compatible, util::{
     INODE_SIZE, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE

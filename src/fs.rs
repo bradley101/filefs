@@ -46,8 +46,7 @@ mod tests {
         const TEST_FS_SIZE: u32 = 10 * (1 << 20); // 10 MB
         const BLOCK_SIZE: u32 = 4 * (1 << 10); // 4 KB
         const BYTES_PER_INODE: u32 = 1 << 12; // 4096 bytes per inode
-        let file_name = "test_fs.dat".to_string();
-        let medium = crate::medium::file::file_medium::new(file_name);
+        let medium = crate::medium::file::file_medium::new("test_fs.dat");
 
         let fs = ffs::new(
             medium,
@@ -60,8 +59,7 @@ mod tests {
 
     #[test]
     fn test_existing_fs() {
-        let file_name = "test_fs.dat".to_string();
-        let medium = crate::medium::file::file_medium::new(file_name);
+        let medium = crate::medium::file::file_medium::new("test_fs.dat");
         let fs = ffs::load(medium);
         assert!(fs.is_ok());
     }

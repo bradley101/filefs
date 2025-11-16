@@ -6,78 +6,56 @@ pub struct fs_metadata<T: byte_compatible> {
     super_block: SuperBlock,
     inode_bitmap: InodeBitmap,
     block_bitmap: BlockBitmap,
-    medium: Option<Rc<RefCell<T>>>
-}
-
-impl <T: byte_compatible> Default for fs_metadata<T> {
-    fn default() -> Self {
-        Self {
-            super_block: SuperBlock::default(),
-            inode_bitmap: InodeBitmap::default(),
-            block_bitmap: BlockBitmap::default(),
-            medium: None
-        }
-    }
+    medium: Rc<RefCell<T>>
 }
 
 impl <T: byte_compatible> fs_metadata<T> {
     
     pub fn create_new(medium: Rc<RefCell<T>>, fs_size: u32, block_size: u32, bytes_per_inode: u32) -> Result<Self, Error>
-    {
-        let mut md = fs_metadata::<T>::default();
-        md.medium = Some(medium);
+    {   
+        let super_block = SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
+        super_block.persist(medium.borrow_mut())?;
         
-        md.super_block = SuperBlock::create_new(fs_size, block_size, bytes_per_inode);
-        let tmp_res = md.super_block.persist(md.medium.unwrap().borrow_mut());
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        // Create the Inode Bitmap
-        let inode_bitmap = InodeBitmap::new(md.super_block.get_total_inodes());
-        let tmp_res = inode_bitmap.persist(md.medium.unwrap().borrow_mut(), &md.super_block);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
+        let inode_bitmap = InodeBitmap::new(super_block.get_total_inodes());
+        inode_bitmap.persist(medium.borrow_mut(), &super_block)?;
         
-        md.block_bitmap = BlockBitmap::new(md.super_block.get_total_blocks());
-        let tmp_res = md.block_bitmap.persist(md.medium.unwrap().borrow_mut(), &md.super_block);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
+        let mut block_bitmap = BlockBitmap::new(super_block.get_total_blocks());
 
         // set the bitmap in the bitmap blocks for the above structures
-        md.block_bitmap.set(1);
-        (0..md.super_block.get_inode_bitmap_block_count())
+        block_bitmap.set(1);
+        (0..super_block.get_inode_bitmap_block_count())
             .for_each(|b|
-                md.block_bitmap.set(b + 1));
-        (0..md.super_block.get_block_bitmap_block_count())
+                block_bitmap.set(b + 1));
+        (0..super_block.get_block_bitmap_block_count())
             .for_each(|b|
-                md.block_bitmap.set(1 + md.super_block.get_inode_bitmap_block_count() + b));
+                block_bitmap.set(1 + super_block.get_inode_bitmap_block_count() + b));
 
-        let tmp_res = md.block_bitmap.persist(md.medium.unwrap().borrow_mut(), &md.super_block);
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        Ok(md)
+        block_bitmap.persist(medium.borrow_mut(), &super_block)?;
+        
+        Ok(Self {
+            super_block,
+            inode_bitmap,
+            block_bitmap,
+            medium
+        })
     }
 
     pub fn fetch(medium: Rc<RefCell<T>>) -> Result<Self, Error>
     {
-        let mut md = fs_metadata::<T>::default();
-        md.medium = Some(medium);
-        let md_mut_ref = md.medium.unwrap().borrow_mut();
-
-        md.super_block = SuperBlock::deserialize(md_mut_ref)?;
-        md.inode_bitmap = InodeBitmap::fetch(md_mut_ref, &md.super_block)?;
-        md.block_bitmap = BlockBitmap::fetch(md_mut_ref, &md.super_block)?;
-
-        Ok(md)
+        let super_block = SuperBlock::deserialize(medium.borrow_mut())?;
+        let inode_bitmap = InodeBitmap::fetch(medium.borrow_mut(), &super_block)?;
+        let block_bitmap = BlockBitmap::fetch(medium.borrow_mut(), &super_block)?;
+        
+        Ok(Self {
+            super_block,
+            inode_bitmap,
+            block_bitmap,
+            medium
+        })
     }
 
     fn persist_super_block(&mut self) -> Result<(), std::io::Error> {
-        self.super_block.persist(self.medium.as_mut().unwrap().borrow_mut())
+        self.super_block.persist(self.medium.borrow_mut())
     }
 
     pub fn super_block_get_total_blocks(&self) -> usize {
@@ -93,11 +71,11 @@ impl <T: byte_compatible> fs_metadata<T> {
     }
 
     pub fn persist_inode_bitmap(&mut self) -> Result<(), std::io::Error> {
-        self.inode_bitmap.persist(self.medium.as_mut().unwrap().borrow_mut(), &self.super_block)
+        self.inode_bitmap.persist(self.medium.borrow_mut(), &self.super_block)
     }
 
     pub fn persist_inode(&mut self, inode: &Inode) -> Result<(), std::io::Error> {
-        inode.persist(self.medium.as_mut().unwrap().borrow_mut(), &self.super_block)
+        inode.persist(self.medium.borrow_mut(), &self.super_block)
     }
 
     pub fn set_inode_in_bitmap(&mut self, inode: u16) {
@@ -105,7 +83,7 @@ impl <T: byte_compatible> fs_metadata<T> {
     }
 
     fn persist_block_bitmap(&mut self) -> Result<(), std::io::Error> {
-        self.block_bitmap.persist(self.medium.as_mut().unwrap().borrow_mut(), &self.super_block)
+        self.block_bitmap.persist(self.medium.borrow_mut(), &self.super_block)
     }
 
     pub fn is_inode_bitmap_full(&self) -> bool {

@@ -1,6 +1,6 @@
 
 use std::cell::RefMut;
-use std::{io::Cursor, os::unix::fs::FileExt};
+use std::io::Cursor;
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::fs_metadata::fs_metadata;
@@ -97,7 +97,7 @@ impl Inode {
 
     // fn deserialize(buffer: Vec<u8>) -> 
 
-    pub fn load<T: byte_compatible>(medium: &mut T, inode_number: u16, metadata: &fs_metadata<T>) -> std::io::Result<Self> {
+    pub fn load<T: byte_compatible>(medium: RefMut<'_, T>, inode_number: u16, metadata: &fs_metadata<T>) -> std::io::Result<Self> {
         let inode_offset = 
             metadata.super_block_get_inode_start_block() as u64 * metadata.super_block_get_block_size() as u64
             + (INODE_SIZE as u64 * inode_number as u64);

@@ -1,5 +1,5 @@
 
-use std::{cell::RefMut, os::unix::fs::FileExt};
+use std::cell::RefMut;
 
 use bitvec::prelude::*;
 
