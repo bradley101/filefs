@@ -6,7 +6,7 @@ use crate::{medium::types::byte_compatible, util::{
     INODE_SIZE, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE
 }};
 
-#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub struct SuperBlock {
     version: [u8; 3],
     total_inodes: u16,
@@ -106,13 +106,7 @@ impl SuperBlock {
         let mut block = Block::default();
         block.data.resize(SUPER_BLOCK_SIZE, 0);
 
-        let tmp_res =
-            file.read_all(SUPER_BLOCK_FILE_OFFSET, block.data.len(), block.data.as_mut_slice());
-        
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
+        file.read_all(SUPER_BLOCK_FILE_OFFSET, block.data.len(), block.data.as_mut_slice())?;
         SuperBlock::deserialize_block(block)
     }
 

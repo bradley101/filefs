@@ -12,7 +12,7 @@ use super::inode_bitmap::InodeBitmap;
 use super::super_block::SuperBlock;
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FileType {
     #[default]
     File = 0_u8,

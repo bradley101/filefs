@@ -10,16 +10,12 @@ use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
 use crate::util::Path;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Default)]
 pub struct Directory {
     inode: Inode,
 }
 
 impl Directory {
-    pub fn new(inode: Inode) -> Self {
-        Self { inode  }
-    }
-
     pub fn get_inode_number(&self) -> u16 {
         self.inode.inode_number
     }
@@ -44,10 +40,12 @@ impl Directory {
         metadata: &fs_metadata<M>,
         medium: RefMut<'_, M>) -> Result<Self, std::io::Error>
     {
-        Ok(Directory::new(Inode::load(
-            medium,
-            0,
-            metadata)?))
+        Ok(Self {
+            inode: Inode::load(
+                medium,
+                0,
+                metadata)?
+        })
     }
 
 }
