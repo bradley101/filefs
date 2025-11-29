@@ -1,5 +1,5 @@
 
-use std::{io::{Seek, SeekFrom, Write}, os::unix::fs::FileExt};
+use std::cell::RefMut;
 
 use bitvec::prelude::*;
 
@@ -21,7 +21,7 @@ impl BlockBitmap {
         }
     }
 
-    pub fn persist<T: byte_compatible>(&self, medium: &mut &T, super_block_ref: &SuperBlock) -> std::io::Result<()> {
+    pub fn persist<T: byte_compatible>(&self, medium: RefMut<'_, T>, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let blocks = self.serialize(super_block_ref);
 
         for block in blocks {
@@ -35,7 +35,7 @@ impl BlockBitmap {
         Ok(())
     }
 
-    pub fn fetch<T: byte_compatible>(medium: &mut T, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
+    pub fn fetch<T: byte_compatible>(medium: RefMut<'_, T>, super_block_ref: &SuperBlock) -> std::io::Result<Self> {
         let total_block_bitmap_blocks = super_block_ref.get_block_bitmap_block_count();
         let mut blocks: Vec<Block> = Vec::with_capacity(total_block_bitmap_blocks);
         let mut start = ((1 + super_block_ref.get_inode_bitmap_block_count()) * super_block_ref.get_block_size()) as u64;
