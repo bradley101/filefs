@@ -28,10 +28,9 @@ impl <T: byte_compatible> ffs<T> {
                                                                size,
                                                                block_size,
                                                                bytes_per_inode)?;
-        let cwd = Directory::create_new(FileType::Directory,
-                                                    "/",
-                                                    None,
-                                                    &mut metadata)?;
+        let cwd = Directory::new("/",
+                                            None,
+                                            &mut metadata)?;
 
         Ok(Self { metadata, medium, cwd })
     }

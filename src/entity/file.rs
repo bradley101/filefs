@@ -2,11 +2,11 @@ use std::io::Error;
 
 use crate::{core::inode::{FileType, Inode}, entity::directory::Directory, fs_metadata::fs_metadata, medium::types::byte_compatible, util::Path};
 
-pub struct file {
+pub struct File {
     inode: Inode
 }
 
-impl file {
+impl File {
     pub fn new<T: Path, M: byte_compatible>(
         name: T,
         parent: &Directory,
