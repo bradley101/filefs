@@ -20,4 +20,12 @@ impl File {
                 metadata)?
         })
     }
+
+    pub fn load<T: Path, M: byte_compatible>(
+        name: T,
+        parent: &Directory,
+        metadata: &mut fs_metadata<M>) -> Result<Self, Error>
+    {
+        
+    }
 }
