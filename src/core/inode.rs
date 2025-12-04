@@ -5,7 +5,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
-use crate::util::{Path, INODE_SIZE};
+use crate::util::{Path, INODE_SIZE, MAX_CHILDREN_COUNT};
 
 use super::block_bitmap::BlockBitmap;
 use super::inode_bitmap::InodeBitmap;
@@ -19,12 +19,12 @@ pub enum FileType {
     Directory = 1
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Inode {
     pub inode_number: u16,
     pub parent: u16,
     pub name: String,
-    pub data_blocks: [u16; 32],
+    pub data_blocks: [u16; MAX_CHILDREN_COUNT],
     pub block_bitmap: BlockBitmap,
     pub file_type: FileType,
     pub file_size: u32,
@@ -51,8 +51,8 @@ impl Inode {
             inode_number,
             parent: parent,
             name: name,
-            data_blocks: [0_u16; 32],
-            block_bitmap: BlockBitmap::new(metadata.super_block_get_total_blocks() as usize),
+            data_blocks: [0_u16; MAX_CHILDREN_COUNT],
+            block_bitmap: BlockBitmap::new(MAX_CHILDREN_COUNT as usize),
             file_type,
             file_size: 0,
         };
