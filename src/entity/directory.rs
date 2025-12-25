@@ -12,7 +12,6 @@ use crate::util::Path;
 
 use super::file::File;
 
-#[derive(Default)]
 pub struct Directory {
     inode: Inode,
 }

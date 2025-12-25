@@ -12,15 +12,15 @@ impl File {
         parent: &Directory,
         metadata: &mut fs_metadata<M>) -> Result<Self, Error>
     {
-        Ok(Self {
-            inode: Inode::create_new(
-                parent.get_inode_number(),
-                name,
-                FileType::File,
-                metadata)?
-        })
-    }
+        let inode = Inode::create_new(
+            parent.get_inode_number(),
+            name,
+            FileType::File,
+            metadata)?
 
+
+    }
+/*
     pub fn load<T: Path, M: byte_compatible>(
         name: T,
         parent: &Directory,
@@ -28,4 +28,5 @@ impl File {
     {
         
     }
+*/
 }

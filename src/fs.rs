@@ -25,12 +25,12 @@ impl <T: byte_compatible> ffs<T> {
     pub fn new(medium: T, size: u32, block_size: u32, bytes_per_inode: u32) -> Result<Self, std::io::Error> {
         let medium = Rc::new(RefCell::new(medium));
         let mut metadata = fs_metadata::create_new(medium.clone(),
-                                                               size,
-                                                               block_size,
-                                                               bytes_per_inode)?;
+            size,
+            block_size,
+            bytes_per_inode)?;
         let cwd = Directory::new("/",
-                                            None,
-                                            &mut metadata)?;
+            None,
+            &mut metadata)?;
 
         Ok(Self { metadata, medium, cwd })
     }

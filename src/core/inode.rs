@@ -96,7 +96,7 @@ impl Inode {
     }
 
     // fn deserialize(buffer: Vec<u8>) -> 
-
+/*
     pub fn load<T: byte_compatible>(medium: RefMut<'_, T>, inode_number: u16, metadata: &fs_metadata<T>) -> std::io::Result<Self> {
         let inode_offset = 
             metadata.super_block_get_inode_start_block() as u64 * metadata.super_block_get_block_size() as u64
@@ -113,8 +113,9 @@ impl Inode {
         let inode_number =  cursor.read_u16::<LittleEndian>()?; // Read inode number
         // let inode_number = cursor.read_u16::<LittleEndian>();
 
-        Ok(Inode::default())
+//        Ok(Inode::default())
     }
+*/
 }
 
 
