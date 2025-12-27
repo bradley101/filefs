@@ -29,8 +29,8 @@ impl Directory {
             metadata)?;
         
         if parent.is_some() {
-            let parent = parent.unwrap();
-            let mut block_bitmap = &parent.inode.block_bitmap;
+            // let parent = parent.unwrap();
+            // let mut block_bitmap = &parent.inode.block_bitmap;
         }
         Ok(Self { inode })
     }
@@ -66,6 +66,19 @@ impl Directory {
         metadata: &mut fs_metadata<M>
     ) -> Result<File, std::io::Error> {
         File::new(name, &self, metadata)
+    }
+
+    pub fn get_first_empty_block(&self) -> Option<usize> {
+        self.inode.block_bitmap.get_first_free_block()
+    }
+
+    pub fn get_available_bit_in_non_full_block<M: byte_compatible>(
+        &self,
+        metadata: &mut fs_metadata<M>) -> Option<(usize, usize)> {
+        
+        let inode_block_bitmap = &self.inode.block_bitmap;
+
+        None
     }
 
 

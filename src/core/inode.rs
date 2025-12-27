@@ -1,14 +1,11 @@
 
 use std::cell::RefMut;
-use std::io::Cursor;
-use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
 use crate::util::{Path, INODE_SIZE, MAX_CHILDREN_COUNT};
 
 use super::block_bitmap::BlockBitmap;
-use super::inode_bitmap::InodeBitmap;
 use super::super_block::SuperBlock;
 
 #[repr(u8)]
@@ -49,8 +46,8 @@ impl Inode {
         let inode_number = metadata.inode_find_first_free().expect("No free inodes available") as u16;
         let new_inode = Self {
             inode_number,
-            parent: parent,
-            name: name,
+            parent,
+            name,
             data_blocks: [0_u16; MAX_CHILDREN_COUNT],
             block_bitmap: BlockBitmap::new(MAX_CHILDREN_COUNT as usize),
             file_type,

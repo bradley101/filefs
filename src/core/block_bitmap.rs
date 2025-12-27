@@ -113,4 +113,9 @@ impl BlockBitmap {
     pub fn set(&mut self, block_number: usize) {
         self.bitmap.set(block_number, true);
     }
+
+    pub fn get_first_free_block(&self) -> Option<usize> {
+        self.bitmap.first_zero()
+    }
+
 }

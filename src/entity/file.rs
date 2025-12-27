@@ -12,21 +12,22 @@ impl File {
         parent: &Directory,
         metadata: &mut fs_metadata<M>) -> Result<Self, Error>
     {
+        let empty_block = match parent.get_first_empty_block() {
+            Some(v) => v,
+            None => return Err(std::io::Error::new(
+                               std::io::ErrorKind::Other,
+                               "No free blocks available in directory"))
+        };
+        
+
         let inode = Inode::create_new(
             parent.get_inode_number(),
             name,
             FileType::File,
-            metadata)?
-
-
-    }
-/*
-    pub fn load<T: Path, M: byte_compatible>(
-        name: T,
-        parent: &Directory,
-        metadata: &mut fs_metadata<M>) -> Result<Self, Error>
-    {
+            metadata)?;
         
+        
+
+
     }
-*/
 }
