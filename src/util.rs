@@ -18,6 +18,10 @@ pub const INODE_BITMAP_STARTING_BLOCK_NUMBER: usize = 1;
 pub const SUPER_BLOCK_FILE_OFFSET: u64 = 0;
 pub const SUPER_BLOCK_SIZE: usize = 1 << 8;
 
+pub type BlockNum = u16;
+pub type InodeNum = u16;
+pub type FileSize = u32;
+
 pub trait Path {
     fn to_le_bytes(&self) -> &[u8];
     fn to_String(&self) -> String;

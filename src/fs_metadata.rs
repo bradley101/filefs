@@ -1,6 +1,6 @@
 use std::{cell::RefCell, io::Error, rc::Rc};
 
-use crate::{core::{block_bitmap::BlockBitmap, inode::Inode, inode_bitmap::InodeBitmap, super_block::SuperBlock}, medium::types::byte_compatible};
+use crate::{core::{block_bitmap::BlockBitmap, inode::Inode, inode_bitmap::InodeBitmap, super_block::SuperBlock}, medium::types::byte_compatible, util::InodeNum};
 
 pub struct fs_metadata<T: byte_compatible> {
     super_block: SuperBlock,
@@ -78,7 +78,7 @@ impl <T: byte_compatible> fs_metadata<T> {
         inode.persist(self.medium.borrow_mut(), &self.super_block)
     }
 
-    pub fn set_inode_in_bitmap(&mut self, inode: u16) {
+    pub fn set_inode_in_bitmap(&mut self, inode: InodeNum) {
         self.inode_bitmap.set(inode as usize);
     }
 

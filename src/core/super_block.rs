@@ -3,22 +3,22 @@ use std::{cell::RefMut, cmp::max};
 use super::{block::Block, block_data_types::BlockDataType};
 
 use crate::{medium::types::byte_compatible, util::{
-    INODE_SIZE, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE
+    BlockNum, INODE_SIZE, InodeNum, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE
 }};
 
 #[derive(Default)]
 pub struct SuperBlock {
     version: [u8; 3],
-    total_inodes: u16,
-    total_blocks: u16,
-    free_inodes: u16,
-    free_blocks: u16,
+    total_inodes: InodeNum,
+    total_blocks: BlockNum,
+    free_inodes: InodeNum,
+    free_blocks: BlockNum,
     inode_size_log: u8,
     block_size_log: u8,
     inode_bitmap_block_count: u8,
     block_bitmap_block_count: u8,
-    inode_start_block: u16,
-    total_inode_blocks: u16,
+    inode_start_block: BlockNum,
+    total_inode_blocks: BlockNum,
 }
 
 

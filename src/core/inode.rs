@@ -3,7 +3,7 @@ use std::cell::RefMut;
 
 use crate::fs_metadata::fs_metadata;
 use crate::medium::types::byte_compatible;
-use crate::util::{Path, INODE_SIZE, MAX_CHILDREN_COUNT};
+use crate::util::{BlockNum, FileSize, INODE_SIZE, InodeNum, MAX_CHILDREN_COUNT, Path};
 
 use super::block_bitmap::BlockBitmap;
 use super::super_block::SuperBlock;
@@ -18,18 +18,18 @@ pub enum FileType {
 
 #[derive(Debug, Clone)]
 pub struct Inode {
-    pub inode_number: u16,
-    pub parent: u16,
+    pub inode_number: InodeNum,
+    pub parent: InodeNum,
     pub name: String,
-    pub data_blocks: [u16; MAX_CHILDREN_COUNT],
+    pub data_blocks: [BlockNum; MAX_CHILDREN_COUNT],
     pub block_bitmap: BlockBitmap,
     pub file_type: FileType,
-    pub file_size: u32,
+    pub file_size: FileSize,
 }
 
 impl Inode {
     pub fn create_new<T: Path, M: byte_compatible>
-        (parent: u16,
+        (parent: InodeNum,
          name: T,
          file_type: FileType,
          metadata: &mut fs_metadata<M>) -> Result<Self, std::io::Error>
@@ -48,7 +48,7 @@ impl Inode {
             inode_number,
             parent,
             name,
-            data_blocks: [0_u16; MAX_CHILDREN_COUNT],
+            data_blocks: [0; MAX_CHILDREN_COUNT],
             block_bitmap: BlockBitmap::new(MAX_CHILDREN_COUNT as usize),
             file_type,
             file_size: 0,
@@ -92,27 +92,12 @@ impl Inode {
         buffer
     }
 
-    // fn deserialize(buffer: Vec<u8>) -> 
-/*
-    pub fn load<T: byte_compatible>(medium: RefMut<'_, T>, inode_number: u16, metadata: &fs_metadata<T>) -> std::io::Result<Self> {
-        let inode_offset = 
-            metadata.super_block_get_inode_start_block() as u64 * metadata.super_block_get_block_size() as u64
-            + (INODE_SIZE as u64 * inode_number as u64);
+    pub fn get_free_location_in_non_zero_block<M: byte_compatible>(
+        &self,
+        metadata: &fs_metadata<M>) -> Option<(usize, usize)>
+    {
         
-        let mut buffer = vec![0_u8; INODE_SIZE];
-        let tmp_res = medium.read_all(inode_offset, buffer.len(), &mut buffer);
-
-        if tmp_res.is_err() {
-            return Err(tmp_res.err().unwrap());
-        }
-
-        let mut cursor = Cursor::new(buffer);
-        let inode_number =  cursor.read_u16::<LittleEndian>()?; // Read inode number
-        // let inode_number = cursor.read_u16::<LittleEndian>();
-
-//        Ok(Inode::default())
     }
-*/
 }
 
 
