@@ -3,7 +3,7 @@ use std::cell::RefMut;
 
 use bitvec::prelude::*;
 
-use super::{block::Block, block_data_types::BlockDataType, super_block::SuperBlock};
+use super::{block::Block, block_data_types::BlockType, super_block::SuperBlock};
 use crate::{medium::types::byte_compatible, util::INODE_BITMAP_STARTING_BLOCK_NUMBER};
 
 #[derive(Clone, Default)]
@@ -54,7 +54,7 @@ impl InodeBitmap {
             blocks.push(Block {
                 block_number: (i + INODE_BITMAP_STARTING_BLOCK_NUMBER) as u16,
                 data: buffer,
-                block_type: BlockDataType::InodeBitmap,
+                block_type: BlockType::InodeBitmap,
             });
             start += super_block_ref.get_block_size() as u64;
         }
@@ -102,7 +102,7 @@ impl InodeBitmap {
             blocks.push(Block {
                 block_number: (i + INODE_BITMAP_STARTING_BLOCK_NUMBER) as u16,
                 data: data.to_vec(),
-                block_type: BlockDataType::InodeBitmap,
+                block_type: BlockType::InodeBitmap,
             });
         }
 

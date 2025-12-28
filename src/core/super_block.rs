@@ -1,6 +1,6 @@
 use std::{cell::RefMut, cmp::max};
 
-use super::{block::Block, block_data_types::BlockDataType};
+use super::{block::Block, block_data_types::BlockType};
 
 use crate::{medium::types::byte_compatible, util::{
     BlockNum, INODE_SIZE, InodeNum, SUPER_BLOCK_FILE_OFFSET, SUPER_BLOCK_SIZE
@@ -98,7 +98,7 @@ impl SuperBlock {
         Block {
             block_number: 0, // Superblock is always at block number 0
             data: buffer,
-            block_type: BlockDataType::SuperBlock,
+            block_type: BlockType::SuperBlock,
         }
     }
 

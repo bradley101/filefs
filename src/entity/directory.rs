@@ -77,7 +77,7 @@ impl Directory {
         metadata: &mut fs_metadata<M>) -> Option<(usize, usize)> {
         
         let inode_block_bitmap = &self.inode.block_bitmap;
-
+        for inode_block_bitmap.stringify!
         None
     }
 
