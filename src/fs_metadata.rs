@@ -6,7 +6,7 @@ pub struct fs_metadata<T: byte_compatible> {
     super_block: SuperBlock,
     inode_bitmap: InodeBitmap,
     block_bitmap: BlockBitmap,
-    medium: Rc<RefCell<T>>
+    pub medium: Rc<RefCell<T>>
 }
 
 impl <T: byte_compatible> fs_metadata<T> {
