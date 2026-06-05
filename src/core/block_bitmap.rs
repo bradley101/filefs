@@ -3,7 +3,7 @@ use std::cell::RefMut;
 
 use bitvec::prelude::*;
 
-use super::{block::Block, block_data_types::BlockDataType, super_block::SuperBlock};
+use super::{block::Block, block_data_types::BlockType, super_block::SuperBlock};
 use crate::{medium::types::byte_compatible, util::INODE_BITMAP_STARTING_BLOCK_NUMBER};
 
 #[derive(Debug, Clone, Default)]
@@ -17,7 +17,7 @@ impl BlockBitmap {
         let mut bitmap = bitvec![u8, Lsb0; 0; num_blocks];
         bitmap.fill(false);
         Self {
-            bitmap: bitmap
+            bitmap
         }
     }
 
@@ -50,7 +50,7 @@ impl BlockBitmap {
             blocks.push(Block {
                 block_number: (INODE_BITMAP_STARTING_BLOCK_NUMBER + super_block_ref.get_inode_bitmap_block_count() + i) as u16,
                 data: buffer,
-                block_type: BlockDataType::BlockBitmap,
+                block_type: BlockType::BlockBitmap,
             });
             start += super_block_ref.get_block_size() as u64;
         }
@@ -99,7 +99,7 @@ impl BlockBitmap {
             blocks.push(Block {
                 block_number: (1 + super_block_ref.get_inode_bitmap_block_count() + i) as u16,
                 data: data.to_vec(),
-                block_type: BlockDataType::BlockBitmap,
+                block_type: BlockType::BlockBitmap,
             });
         }        
 
@@ -113,4 +113,9 @@ impl BlockBitmap {
     pub fn set(&mut self, block_number: usize) {
         self.bitmap.set(block_number, true);
     }
+
+    pub fn get_first_free_block(&self) -> Option<usize> {
+        self.bitmap.first_zero()
+    }
+
 }

@@ -10,8 +10,8 @@
         g. Children Inode Numbers (for directories)
 */
 
-#[derive(Default)]
-pub enum BlockDataType {
+#[derive(Default, Clone, Copy)]
+pub enum BlockType {
     SuperBlock,
     InodeBitmap,
     BlockBitmap,
