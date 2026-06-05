@@ -35,7 +35,7 @@ impl DirectoryBlockView {
         self.block.persist(metadata)
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
-
-    }
+    // pub fn serialize(&self) -> Vec<u8> {
+    //
+    // }
 }

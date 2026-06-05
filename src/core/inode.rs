@@ -59,6 +59,15 @@ impl Inode {
 
         Ok(new_inode)
     }
+
+    pub fn load<M: byte_compatible>
+        (inode: InodeNum,
+         metadata: &mut fs_metadata<M>) -> Result<Self, std::io::Error>
+    {
+        // TODO - implement this correctly here
+        Ok(Inode { })
+    }
+
     pub fn persist<T: byte_compatible>(&self, medium: RefMut<'_, T>, super_block_ref: &SuperBlock) -> std::io::Result<()> {
         let buffer = self.serialize();
         let inode_offset = 
@@ -92,12 +101,12 @@ impl Inode {
         buffer
     }
 
-    pub fn get_free_location_in_non_zero_block<M: byte_compatible>(
-        &self,
-        metadata: &fs_metadata<M>) -> Option<(usize, usize)>
-    {
-        
-    }
+    // pub fn get_free_location_in_non_zero_block<M: byte_compatible>(
+    //     &self,
+    //     metadata: &fs_metadata<M>) -> Option<(usize, usize)>
+    // {
+    //
+    // }
 }
 
 

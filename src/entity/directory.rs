@@ -32,6 +32,7 @@ impl Directory {
             // let parent = parent.unwrap();
             // let mut block_bitmap = &parent.inode.block_bitmap;
         }
+
         Ok(Self { inode })
     }
 
@@ -72,14 +73,14 @@ impl Directory {
         self.inode.block_bitmap.get_first_free_block()
     }
 
-    pub fn get_available_bit_in_non_full_block<M: byte_compatible>(
-        &self,
-        metadata: &mut fs_metadata<M>) -> Option<(usize, usize)> {
-        
-        let inode_block_bitmap = &self.inode.block_bitmap;
-        for inode_block_bitmap.stringify!
-        None
-    }
+    // pub fn get_available_bit_in_non_full_block<M: byte_compatible>(
+    //     &self,
+    //     metadata: &mut fs_metadata<M>) -> Option<(usize, usize)> {
+    //
+    //     let inode_block_bitmap = &self.inode.block_bitmap;
+    //     for inode_block_bitmap.stringify!
+    //     None
+    // }
 
 
 
